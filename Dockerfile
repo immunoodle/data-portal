@@ -29,14 +29,13 @@ RUN curl -L -o /tmp/miniconda.sh "https://repo.anaconda.com/miniconda/Miniconda3
     bash /tmp/miniconda.sh -b -p /opt/miniconda && \
     rm /tmp/miniconda.sh
 
-# Accept Conda Terms of Service for required channels
-RUN conda config --set channel_priority strict && \
+# Remove all default channels and configure only conda-forge
+RUN conda config --remove-key channels && \
     conda config --add channels conda-forge && \
-    conda config --add channels defaults && \
-    echo "yes" | conda --version
+    conda config --set channel_priority strict
 
 # Create the Conda environment and install Python packages
-RUN conda create -n project_py_env python=3.9 -y -c conda-forge && \
+RUN conda create -n project_py_env python=3.9 -y --override-channels -c conda-forge && \
     conda run -n project_py_env pip install --no-cache-dir psycopg2-binary python-dotenv
 
 RUN R -e 'install.packages(c("jose"))'
