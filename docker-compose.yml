@@ -1,0 +1,32 @@
+# docker-compose.yml
+
+version: '3'
+
+services:
+  madi-toolset:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    # Gives the newly built image a consistent name
+    image: madi-data-portal
+
+    # Loads your secrets from the .env file at runtime
+    env_file: docker.env
+
+    # Sets environment variables
+    environment:
+      - SHINY_LOG_LEVEL=TRACE
+
+    # Maps the container's port 3838 to the host's port 3838
+    ports:
+      - "3838:3838"
+
+    # Keeps the container's stdin open
+    stdin_open: true
+
+    # Allocates a pseudo-TTY
+    tty: true
+
+    # Assigns a name to the container
+    container_name: madi-data-portal
