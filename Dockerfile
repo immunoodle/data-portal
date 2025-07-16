@@ -1,4 +1,6 @@
 FROM rocker/shiny-verse:latest
+LABEL org.opencontainers.image.source=https://github.com/hoenlab/data-portal
+
 
 # Install system libraries needed by R packages or Python
 RUN apt-get update && apt-get install -y \
