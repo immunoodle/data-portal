@@ -1,7 +1,6 @@
 FROM rocker/shiny-verse:latest
 LABEL org.opencontainers.image.source=https://github.com/hoenlab/data-portal
 
-
 # Install system libraries needed by R packages or Python
 RUN apt-get update && apt-get install -y \
     libpq-dev \
@@ -19,9 +18,7 @@ RUN apt-get update && apt-get install -y \
     wget \
     vim
 
-
 RUN R -e 'install.packages(c("shinyjs", "shinyalert", "shinydashboard", "shinyWidgets", "visNetwork", "DT", "sqldf", "rsconnect", "shinyFiles", "rhandsontable", "sendmailR", "reactable", "auth0", "datamods","openxlsx","aws.s3"))'
-
 
 # Install your R packages
 RUN R -e "install.packages(c('reticulate', 'jsonlite', 'shinyAce'))"
@@ -32,8 +29,14 @@ RUN curl -L -o /tmp/miniconda.sh "https://repo.anaconda.com/miniconda/Miniconda3
     bash /tmp/miniconda.sh -b -p /opt/miniconda && \
     rm /tmp/miniconda.sh
 
+# Accept Conda Terms of Service for required channels
+RUN conda config --set channel_priority strict && \
+    conda config --add channels conda-forge && \
+    conda config --add channels defaults && \
+    echo "yes" | conda --version
+
 # Create the Conda environment and install Python packages
-RUN conda create -n project_py_env python=3.9 -y && \
+RUN conda create -n project_py_env python=3.9 -y -c conda-forge && \
     conda run -n project_py_env pip install --no-cache-dir psycopg2-binary python-dotenv
 
 RUN R -e 'install.packages(c("jose"))'
