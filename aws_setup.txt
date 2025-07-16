@@ -1,0 +1,4 @@
+
+- Make AWS account
+- Setup IAM account
+- Username, keyword: programmatic, create access key, give persmission awss3fullaccess

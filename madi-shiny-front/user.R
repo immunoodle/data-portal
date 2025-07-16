@@ -1,0 +1,817 @@
+# --- Reactive values ---
+# Provide meaningful default values
+currentuser <- reactiveVal("Unknown User")
+# Initialize userData_upload to NULL to clearly indicate no user data initially
+userData_upload <- reactiveVal(NULL)
+
+# Shows the SQL query *string* that was constructed (for debugging)
+output$select_user_str_display <- renderText({
+  # This reactive generates the SQL string only when this output is rendered
+  current_user_id <- NULL
+
+  # Check if user is authenticated and get user ID
+  if (!isTRUE(session$userData$app_logic_initialized)) {
+    current_user_id <- "mscotzens" # Default for testing/local dev
+  } else if (isTRUE(session$userData$app_logic_initialized)) {
+    # Get user ID from authenticated user data
+    ud <- user_data()
+    if (!is.null(ud) && isTRUE(ud$is_authenticated) && !is.null(ud$email)) {
+      current_user_id <- toString(ud$email)
+      req(nzchar(current_user_id))
+    } else {
+      req(FALSE) # Stop if no valid user data
+    }
+  } else {
+    req(FALSE) # Stop if auth state is unknown
+  }
+
+  current_user_compress <- gsub("[[:punct:][:blank:]]+", "", current_user_id)
+  # Reconstruct the query string safely for display
+  paste0("Attempted query logic: ... WHERE regexp_replace(oauth_unique_id, '[[:punct:][:blank:]]', '', 'g') = '", current_user_compress, "'")
+})
+
+# Function to auto-register new users
+auto_register_user <- function(email, name, compressed_id) {
+  print(paste0("DEBUG: Auto-registering new user: ", email))
+  
+  # Extract username from email (part before @)
+  username <- strsplit(email, "@")[[1]][1]
+  
+  # Ensure all parameters have exactly one value (no NULL, no empty vectors)
+  safe_param <- function(value, default = "") {
+    if (is.null(value) || length(value) == 0 || is.na(value)) {
+      return(default)
+    }
+    return(as.character(value)[1])  # Take first element and ensure it's character
+  }
+  
+  # Prepare parameters safely
+  param_username <- safe_param(username)
+  param_full_name <- safe_param(name %||% email)
+  param_email <- safe_param(email)
+  param_oauth_id <- safe_param(compressed_id)
+  param_display_name <- safe_param(name %||% username)
+  param_created_by <- safe_param("system_auto_register")
+  param_project <- safe_param("NEW_USER_SANDBOX")  # Updated project name
+  
+  print(paste0("DEBUG: Parameters prepared - Username: ", param_username, ", Email: ", param_email))
+  print(paste0("DEBUG: Assigning default workspace 6100 (New User Sandbox)"))
+  
+  # Enhanced insert query with default workspace assignment
+  insert_query <- "
+    INSERT INTO madi_track.users (
+      username, full_name, email, oauth_unique_id, display_name, 
+      is_active, created_by, created_at, project, workspace_id
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP, $8, $9)
+    ON CONFLICT (username) DO UPDATE SET
+      oauth_unique_id = EXCLUDED.oauth_unique_id,
+      email = EXCLUDED.email,
+      full_name = EXCLUDED.full_name,
+      display_name = EXCLUDED.display_name,
+      updated_at = CURRENT_TIMESTAMP
+    RETURNING users_id, is_active, workspace_id;"
+  
+  result <- tryCatch({
+    DBI::dbGetQuery(conn, insert_query, params = list(
+      param_username,              # $1
+      param_full_name,             # $2
+      param_email,                 # $3
+      param_oauth_id,              # $4
+      param_display_name,          # $5
+      TRUE,                        # $6 - is_active (TRUE by default for new users)
+      param_created_by,            # $7
+      param_project,               # $8
+      6100                         # $9 - default workspace_id (New User Sandbox)
+    ))
+  }, error = function(e) {
+    warning(paste("Failed to auto-register user:", e$message))
+    print(paste0("DEBUG: SQL parameters were:"))
+    print(paste0("  Username: '", param_username, "'"))
+    print(paste0("  Full name: '", param_full_name, "'"))
+    print(paste0("  Email: '", param_email, "'"))
+    print(paste0("  OAuth ID: '", param_oauth_id, "'"))
+    print(paste0("  Display name: '", param_display_name, "'"))
+    print(paste0("  Created by: '", param_created_by, "'"))
+    print(paste0("  Project: '", param_project, "'"))
+    print(paste0("  Workspace ID: 6100 (New User Sandbox)"))
+    
+    # Return a more detailed error response
+    data.frame(
+      users_id = NA, 
+      is_active = FALSE, 
+      workspace_id = NA,
+      error = e$message
+    )
+  })
+  
+  print(paste0("DEBUG: Auto-registration result: ", if(nrow(result) > 0 && !is.na(result$users_id[1])) "SUCCESS" else "FAILED"))
+  return(result)
+}
+
+# Helper function for null coalescing
+`%||%` <- function(x, y) {
+  if (is.null(x) || is.na(x) || !nzchar(x)) y else x
+}
+
+# --- Main Observer for User Authentication and UI Setup ---
+observe({
+  # Add comprehensive error handling around the entire observer
+  tryCatch({
+    current_user_id <- NULL
+    current_login_prefix <- "User: " # Default
+
+    # 1. Determine Current User ID and Login Prefix
+    if (is_local_dev()) {
+      # Local development mode
+      current_user_id <- "mscotzens" # Use hardcoded user for local dev
+      current_login_prefix <- "Local Dev as "
+    } else {
+      # Production mode with Dex OIDC
+      ud <- user_data()
+      
+      # Wait until user is authenticated and has email
+      req(ud, isTRUE(ud$is_authenticated), ud$email)
+      
+      current_user_id <- ud$email
+      req(nzchar(current_user_id)) # Stop if email is empty
+      current_login_prefix <- "Logged in as "
+    }
+
+    # 2. Prepare User ID for DB Query (Compression)
+    # Ensure this compression logic EXACTLY matches the one used in the WHERE clause
+    current_user_compress <- gsub("[[:punct:][:blank:]]+", "", current_user_id)
+
+    # 3. Query Database Efficiently and Safely for the Specific User
+    # Updated query to include is_active check
+    sql_query <- "
+      SELECT
+        oauth_unique_id, username, workspace_id, display_name, project, full_name,
+        CAST(users_id AS INTEGER) AS users_id, is_active
+      FROM madi_track.users
+      WHERE regexp_replace(oauth_unique_id, '[[:punct:][:blank:]]', '', 'g') = $1;" # Parameter placeholder
+
+    found_user_data <- tryCatch({
+      # Execute parameterized query
+      DBI::dbGetQuery(conn, sql_query, params = list(current_user_compress))
+    }, error = function(e) {
+      # Handle potential database errors gracefully
+      warning(paste("Database query failed for user:", current_user_compress, "Error:", e$message))
+      data.frame() # Return an empty data frame signifies user not found/error
+    })
+
+    # 4. Handle user registration and access control
+    user_access_status <- "unknown"
+    
+    if (nrow(found_user_data) == 0) {
+      # User not found - auto-register them
+      print(paste0("DEBUG: User not found, auto-registering: ", current_user_id))
+      
+      # Get user name from authentication data
+      ud <- user_data()
+      user_name <- ud$name %||% current_user_id
+      
+      # Auto-register the user
+      registration_result <- auto_register_user(current_user_id, user_name, current_user_compress)
+      
+      if (!is.na(registration_result$users_id)) {
+        print(paste0("DEBUG: User auto-registered with ID: ", registration_result$users_id))
+        print(paste0("DEBUG: User granted immediate access to sandbox workspace"))
+        
+        # Re-query to get the newly registered user
+        found_user_data <- tryCatch({
+          DBI::dbGetQuery(conn, sql_query, params = list(current_user_compress))
+        }, error = function(e) {
+          warning(paste("Failed to re-query after registration:", e$message))
+          data.frame()
+        })
+        
+        user_access_status <- "active"  # New users are now active immediately
+      } else {
+        user_access_status <- "registration_failed"
+      }
+    } else {
+      # User found - check if they're active
+      is_active_value <- found_user_data$is_active[1]
+      print(paste0("DEBUG: User found in database. is_active value: ", is_active_value, " (type: ", typeof(is_active_value), ")"))
+      
+      if (isTRUE(is_active_value)) {
+        user_access_status <- "active"
+        print("DEBUG: User is ACTIVE - will grant full access")
+      } else {
+        user_access_status <- "inactive"
+        print("DEBUG: User is INACTIVE - will deny access")
+      }
+    }
+
+    # 5. Update Reactive Values
+    userData_upload(found_user_data) # Store the query result
+
+    # Debugging print
+    print(paste0("User query rows: ", nrow(found_user_data), " for compressed ID: ", current_user_compress))
+    print(paste0("Original user ID: ", current_user_id))
+    print(paste0("User access status: ", user_access_status))
+
+    # 6. Conditionally Render UI based on user access status
+    if (nrow(found_user_data) > 0 && user_access_status == "active") {
+      # --- User FOUND and ACTIVE in Database - GRANT FULL ACCESS ---
+      print("DEBUG: *** GRANTING FULL ACCESS TO ACTIVE USER ***")
+      
+      user_info <- found_user_data[1, ]
+
+      # Check workspace assignment and type
+      has_workspace <- !is.null(user_info$workspace_id) && !is.na(user_info$workspace_id)
+      is_sandbox_user <- has_workspace && user_info$workspace_id == 6100
+      
+      print(paste0("DEBUG: User workspace info - ID: ", user_info$workspace_id, ", is_sandbox: ", is_sandbox_user, ", has_workspace: ", has_workspace))
+      
+      # Determine workspace display info with better color contrast
+      workspace_info <- if (has_workspace) {
+        if (is_sandbox_user) {
+          list(
+            name = "New User Sandbox",
+            description = "Your personal workspace to explore and add data",
+            color = "#0c5460",           # Darker blue for better contrast
+            bg_color = "#e1f5f9",        # Lighter background
+            icon = "🚀",
+            message = "Welcome! You're in your sandbox workspace where you can explore and add data.",
+            type = "sandbox"
+          )
+        } else {
+          # Handle different MADI workspace IDs
+          workspace_name <- switch(
+            as.character(user_info$workspace_id),
+            "6101" = "MADI Workspace 6101",
+            "6102" = "MADI Workspace 6102", 
+            "6103" = "MADI Workspace 6103",
+            "6104" = "MADI Workspace 6104",
+            "6105" = "MADI Workspace 6105",
+            "6106" = "MADI Workspace 6106",
+            paste("MADI Workspace", user_info$workspace_id)  # Fallback
+          )
+          
+          list(
+            name = workspace_name,
+            description = "Full access to project data",
+            color = "#0d5016",           # Darker green for better contrast
+            bg_color = "#e8f5e8",        # Lighter background
+            icon = "✅",
+            message = paste("You have access to", workspace_name),
+            type = "project"
+          )
+        }
+      } else {
+        list(
+          name = "No Workspace",
+          description = "Contact administrator",
+          color = "#721c24",             # Darker red for better contrast
+          bg_color = "#fdeaea",          # Lighter background
+          icon = "⚠️",
+          message = "No workspace assigned",
+          type = "none"
+        )
+      }
+
+      # Update reactiveVal for current user's display name
+      display_name <- if (!is.null(user_info$full_name) && nzchar(user_info$full_name)) {
+        user_info$full_name
+      } else if (!is.null(user_info$display_name) && nzchar(user_info$display_name)) {
+        user_info$display_name
+      } else {
+        current_user_id # Fallback to email
+      }
+      
+      currentuser(display_name)
+
+      # Remove the 'userData' tab as it's not needed for active users
+      tryCatch({
+        removeTab(inputId = "body_panel_id", target = "userData")
+      }, error = function(e) {
+        # Non-critical error
+      })
+
+      # Render Primary Sidebar Panel with improved colors and contrast
+      output$primarysidepanel <- renderUI({
+        div(
+          style = "padding: 15px; max-width: 100%; overflow-x: hidden;",
+          
+          # Add CSS to override Shiny input text colors globally
+          tags$style(HTML("
+            .radio label, .checkbox label {
+              color: #2c3e50 !important;
+              font-weight: 500 !important;
+            }
+            .shiny-input-radiogroup label, 
+            .shiny-input-checkboxgroup label {
+              color: #2c3e50 !important;
+              font-weight: 500 !important;
+            }
+            .shiny-input-radiogroup .radio-inline label,
+            .shiny-input-checkboxgroup .checkbox-inline label {
+              color: #2c3e50 !important;
+              font-weight: 500 !important;
+            }
+            .control-label {
+              color: #2c3e50 !important;
+              font-weight: 600 !important;
+            }
+          ")),
+          
+          # Welcome section with improved contrast
+          div(
+            style = paste0("background-color: ", workspace_info$bg_color, "; padding: 15px; border-radius: 8px; margin-bottom: 20px; border: 2px solid ", workspace_info$color, ";"),
+            div(
+              style = "display: flex; align-items: center; margin-bottom: 8px;",
+              span(workspace_info$icon, style = "font-size: 1.5em; margin-right: 10px;"),
+              h5("Access Granted", style = paste0("color: ", workspace_info$color, "; margin: 0; font-weight: bold;"))
+            ),
+            p(paste("Welcome,", display_name), style = paste0("color: ", workspace_info$color, "; margin: 5px 0; font-size: 1.1em; font-weight: 600;")),
+            
+            # Workspace-specific messaging with better contrast
+            if (workspace_info$type == "sandbox") {
+              div(
+                style = "background-color: #ffffff; padding: 12px; border-radius: 6px; margin: 10px 0; border: 1px solid #0c5460;",
+                p("🎯 You're in your sandbox workspace!", style = "color: #0c5460; margin: 0; font-weight: 600; font-size: 0.95em;"),
+                p("Start by adding your own studies and data. Contact admin to join a specific project workspace.", style = "color: #0c5460; margin: 5px 0 0 0; font-size: 0.9em;")
+              )
+            } else if (workspace_info$type == "none") {
+              div(
+                style = "background-color: #ffffff; padding: 12px; border-radius: 6px; margin: 10px 0; border: 1px solid #721c24;",
+                p("⚠️ No workspace assigned!", style = "color: #721c24; margin: 0; font-weight: 600; font-size: 0.95em;"),
+                p("Contact administrator to assign a workspace for data access.", style = "color: #721c24; margin: 5px 0 0 0; font-size: 0.9em;")
+              )
+            },
+            
+            div(
+              style = "margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.2);",
+              div(
+                style = "display: flex; justify-content: space-between; margin-bottom: 5px;",
+                span("Project:", style = paste0("color: ", workspace_info$color, "; font-size: 0.9em; font-weight: 600;")),
+                span(user_info$project %||% "None", style = paste0("color: ", workspace_info$color, "; font-size: 0.9em; font-weight: 500;"))
+              ),
+              div(
+                style = "display: flex; justify-content: space-between;",
+                span("Workspace:", style = paste0("color: ", workspace_info$color, "; font-size: 0.9em; font-weight: 600;")),
+                span(workspace_info$name, style = paste0("color: ", workspace_info$color, "; font-size: 0.9em; font-weight: 500;"))
+              )
+            )
+          ),
+          
+          # Main action selection with improved colors and white background
+          div(
+            style = "margin-bottom: 20px;",
+            h5("Choose Data Action", 
+               style = "color: #ffffff; background-color: #2c3e50; margin-bottom: 15px; font-weight: 600; padding: 10px; border-radius: 5px; text-align: center;"),
+            div(
+              style = if (workspace_info$type != "none") {
+                "background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #2c3e50;"
+              } else {
+                "background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #2c3e50; opacity: 0.6;"
+              },
+              if (workspace_info$type != "none") {
+                radioButtons("rb", NULL,
+                             choiceNames = list(
+                               div(
+                                 style = "display: flex; align-items: center; padding: 8px; background-color: #ffffff;",
+                                 tags$i(class = "fa fa-search", style = "color: #e74c3c; margin-right: 10px; font-size: 1.1em;"),
+                                 span("Explore Existing Data", style = "color: #2c3e50; font-weight: 600;")
+                               ),
+                               div(
+                                 style = "display: flex; align-items: center; padding: 8px; background-color: #ffffff;",
+                                 tags$i(class = "fa fa-plus-circle", style = "color: #e74c3c; margin-right: 10px; font-size: 1.1em;"),
+                                 span("Add New Data", style = "color: #2c3e50; font-weight: 600;")
+                               ),
+                               div(
+                                 style = "display: flex; align-items: center; padding: 8px; background-color: #ffffff;",
+                                 tags$i(class = "fa fa-upload", style = "color: #e74c3c; margin-right: 10px; font-size: 1.1em;"),
+                                 span("Upload to Immport", style = "color: #2c3e50; font-weight: 600;")
+                               )
+                             ),
+                             choiceValues = list("exploreData", "addData", "immportUpload"),
+                             selected = "exploreData"
+                )
+              } else {
+                div(
+                  style = "text-align: center; padding: 20px; background-color: #ffffff;",
+                  p("🚫 Data actions disabled", style = "color: #6c757d; font-size: 1.1em; margin-bottom: 10px;"),
+                  p("Workspace assignment required for data access", style = "color: #6c757d; font-size: 0.9em; margin: 0;")
+                )
+              }
+            )
+          ),
+          
+          # Conditional panels with improved colors and contrast
+          if (workspace_info$type != "none") {
+            tagList(
+              conditionalPanel(
+                condition = "input.rb == 'exploreData'",
+                div(
+                  style = "background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #3498db;",
+                  h6("📊 Data Exploration", style = "color: #2980b9; margin-bottom: 10px; font-weight: 600;"),
+                  if (workspace_info$type == "sandbox") {
+                    div(
+                      p("🎯 Exploring your workspace data", style = "color: #2980b9; font-size: 0.9em; margin-bottom: 10px; font-weight: 500;"),
+                      p("Add some studies first, then they'll appear here for exploration!", style = "color: #2980b9; font-size: 0.9em; margin-bottom: 10px;"),
+                      # Use safe fallback for study choices in sandbox
+                      tryCatch({
+                        # Get studies for this user's workspace
+                        user_studies <- DBI::dbGetQuery(conn, 
+                          "SELECT DISTINCT madi_program FROM madi_dat.study WHERE workspace_id = $1", 
+                          params = list(user_info$workspace_id))
+                        
+                        if (nrow(user_studies) > 0) {
+                          div(
+                            style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;",
+                            tags$style(HTML("
+                              #madi_studies .checkbox label {
+                                color: #2c3e50 !important;
+                                font-weight: 500 !important;
+                                font-size: 0.95em !important;
+                              }
+                            ")),
+                            checkboxGroupInput("madi_studies", 
+                                              tags$span("Your Studies:", style = "color: #2980b9; font-weight: 600;"), 
+                                              choices = user_studies$madi_program, 
+                                              selected = user_studies$madi_program[1])
+                          )
+                        } else {
+                          p("No studies found. Add some data using 'Add New Data' option!", 
+                            style = "color: #2980b9; font-style: italic; font-weight: 500;")
+                        }
+                      }, error = function(e) {
+                        p("Click 'Add New Data' to create your first study!", 
+                          style = "color: #2980b9; font-style: italic; font-weight: 500;")
+                      })
+                    )
+                  } else {
+                    div(
+                      style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;",
+                      tags$style(HTML("
+                        #madi_studies .checkbox label {
+                          color: #2c3e50 !important;
+                          font-weight: 500 !important;
+                          font-size: 0.95em !important;
+                        }
+                      ")),
+                      checkboxGroupInput("madi_studies", 
+                                        tags$span("Select MADI Studies:", style = "color: #2980b9; font-weight: 600;"), 
+                                        choices = unique(study$madi_program), 
+                                        selected = "MADI")
+                    )
+                  }
+                )
+              ),
+              
+              conditionalPanel(
+                condition = "input.rb == 'addData'",
+                div(
+                  style = "background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #f39c12;",
+                  h6("➕ Add New Data", style = "color: #d68910; margin-bottom: 10px; font-weight: 600;"),
+                  if (workspace_info$type == "sandbox") {
+                    div(
+                      p("🎯 Add your own data to your workspace", style = "color: #d68910; font-size: 0.9em; margin-bottom: 10px; font-weight: 500;"),
+                      p("Start by creating a new study!", style = "color: #d68910; font-size: 0.9em; font-weight: 600; margin-bottom: 10px;")
+                    )
+                  },
+                  # Enhanced radio buttons with proper text styling
+                  div(
+                    style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;",
+                    tags$style(HTML("
+                      #rb_add .radio label {
+                        color: #2c3e50 !important;
+                        font-weight: 500 !important;
+                        font-size: 0.95em !important;
+                      }
+                    ")),
+                    radioButtons("rb_add", 
+                                tags$span("Select workflow step:", style = "color: #d68910; font-weight: 600;"),
+                                choiceNames = list(
+                                  tags$span("Create new study", style = "color: #2c3e50; font-weight: 500;"),
+                                  tags$span("Add documents and raw files", style = "color: #2c3e50; font-weight: 500;"),
+                                  tags$span("Add templates", style = "color: #2c3e50; font-weight: 500;")
+                                ),
+                                choiceValues = list("createStudy", "addAssociated", "addData2Study"),
+                                selected = character(0)
+                    )
+                  )
+                )
+              ),
+              
+              conditionalPanel(
+                condition = "input.rb == 'adminTasks'",
+                div(
+                  style = "background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #e74c3c;",
+                  h6("🔧 Administration", style = "color: #c0392b; margin-bottom: 10px; font-weight: 600;"),
+                  if (workspace_info$type == "sandbox") {
+                    p("Admin functions available in project workspaces only", style = "color: #c0392b; font-size: 0.9em; font-weight: 500;")
+                  } else {
+                    div(
+                      style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;",
+                      tags$style(HTML("
+                        #rb_admin .radio label {
+                          color: #2c3e50 !important;
+                          font-weight: 500 !important;
+                          font-size: 0.95em !important;
+                        }
+                      ")),
+                      radioButtons("rb_admin", 
+                                  tags$span("Admin functions:", style = "color: #c0392b; font-weight: 600;"),
+                                  choiceNames = list(
+                                    tags$span("Add users", style = "color: #2c3e50; font-weight: 500;"),
+                                    tags$span("Add new program", style = "color: #2c3e50; font-weight: 500;"),
+                                    tags$span("Add new personnel", style = "color: #2c3e50; font-weight: 500;"),
+                                    tags$span("Add program 2 personnel", style = "color: #2c3e50; font-weight: 500;"),
+                                    tags$span("Add workspace", style = "color: #2c3e50; font-weight: 500;")
+                                  ),
+                                  choiceValues = list("add_users", "add_program", "add_personnel", "add_program_2_personnel", "add_workspace"),
+                                  selected = character(0)
+                      )
+                    )
+                  }
+                )
+              ),
+              
+              conditionalPanel(
+                condition = "input.rb == 'immportUpload'",
+                div(
+                  style = "background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #16a085;",
+                  h6("☁️ Immport Upload", style = "color: #138d75; margin-bottom: 10px; font-weight: 600;"),
+                  if (workspace_info$type == "sandbox") {
+                    div(
+                      p("🎯 Upload your data to Immport", style = "color: #138d75; font-size: 0.9em; margin-bottom: 10px; font-weight: 500;"),
+                      p("Upload data from your workspace to the Immport system", style = "color: #138d75; font-size: 0.9em; margin-bottom: 10px;")
+                    )
+                  } else {
+                    p("Upload data to Immport system.", style = "color: #138d75; margin-bottom: 10px; font-weight: 500;")
+                  },
+                  div(
+                    style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #16a085;",
+                    p("Select your data files and configure upload settings.", style = "color: #138d75; margin: 0; font-size: 0.9em; font-weight: 500;")
+                  )
+                )
+              )
+            )
+          },
+          
+          # Add workspace upgrade option for sandbox users with better colors
+          if (workspace_info$type == "sandbox") {
+            div(
+              style = "background-color: #f4f6f7; padding: 15px; border-radius: 8px; border: 2px solid #7f8c8d; margin-top: 20px;",
+              h6("🚀 Ready for a Project Workspace?", style = "color: #2c3e50; margin-bottom: 10px; font-weight: 600;"),
+              p("Contact your administrator to join a specific MADI project workspace for full data access.", style = "color: #2c3e50; margin-bottom: 10px; font-weight: 500;"),
+              div(
+                style = "background-color: #ffffff; padding: 10px; border-radius: 5px; font-family: monospace; border: 1px solid #bdc3c7;",
+                p(paste("Your User ID:", user_info$users_id), style = "color: #2c3e50; margin: 2px 0; font-size: 0.9em; font-weight: 500;"),
+                p(paste("Email:", current_user_id), style = "color: #2c3e50; margin: 2px 0; font-size: 0.9em; font-weight: 500;"),
+                p("Available workspaces: 6101-6106", style = "color: #2c3e50; margin: 2px 0; font-size: 0.9em; font-weight: 500;")
+              )
+            )
+          }
+        )
+      })
+
+    } else {
+      # --- User NOT ACTIVE or Access Denied - DENY ACCESS ---
+      print(paste0("DEBUG: *** DENYING ACCESS TO USER - Status: ", user_access_status, " ***"))
+
+      # Determine appropriate message based on status
+      message_info <- switch(user_access_status,
+        "registered_pending_approval" = list(
+          title = "Account Pending Approval",
+          message = "Your account has been created but is pending administrator approval.",
+          color = "#856404",
+          bg_color = "#fff3cd",
+          icon = "⏳"
+        ),
+        "inactive" = list(
+          title = "Account Inactive",
+          message = "Your account exists but has been deactivated. Please contact the administrator.",
+          color = "#721c24",
+          bg_color = "#f8d7da",
+          icon = "🔒"
+        ),
+        "registration_failed" = list(
+          title = "Registration Failed",
+          message = "Failed to create your account. Please contact the administrator.",
+          color = "#721c24",
+          bg_color = "#f8d7da",
+          icon = "❌"
+        ),
+        default = list(
+          title = "Access Denied",
+          message = "Unable to determine your access status. Please contact the administrator.",
+          color = "#721c24",
+          bg_color = "#f8d7da",
+          icon = "🚫"
+        )
+      )
+
+      # Update reactiveVal to show status
+      currentuser(paste0(current_user_id, " (", user_access_status, ")"))
+
+      # Render Primary Sidebar Panel (showing access denied message)
+      # This is what non-active users see - NO APPLICATION FUNCTIONALITY
+      output$primarysidepanel <- renderUI({
+        div(
+          style = "padding: 15px; max-width: 100%; overflow-x: hidden;",
+          
+          # Main status message with improved styling
+          div(
+            style = paste0("background: linear-gradient(135deg, ", message_info$bg_color, " 0%, ", adjustcolor(message_info$bg_color, alpha.f = 0.8), " 100%); padding: 20px; border-radius: 10px; border-left: 6px solid ", message_info$color, "; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);"),
+            div(
+              style = "display: flex; align-items: center; margin-bottom: 15px;",
+              span(message_info$icon, style = "font-size: 2em; margin-right: 15px;"),
+              h4(message_info$title, style = paste0("color: ", message_info$color, "; margin: 0; font-weight: 600;"))
+            ),
+            p(message_info$message, style = "font-size: 1.1em; margin-bottom: 15px; line-height: 1.4;"),
+            
+            # Status indicators
+            if (user_access_status == "registered_pending_approval") {
+              div(
+                style = "margin-top: 15px;",
+                div(
+                  style = "display: flex; align-items: center; margin-bottom: 8px;",
+                  tags$i(class = "fa fa-check-circle", style = "color: #28a745; margin-right: 8px;"),
+                  span("Authentication successful", style = "color: #28a745; font-weight: 500;")
+                ),
+                div(
+                  style = "display: flex; align-items: center; margin-bottom: 8px;",
+                  tags$i(class = "fa fa-check-circle", style = "color: #28a745; margin-right: 8px;"),
+                  span("Account created in database", style = "color: #28a745; font-weight: 500;")
+                ),
+                div(
+                  style = "display: flex; align-items: center; margin-bottom: 15px;",
+                  tags$i(class = "fa fa-clock-o", style = "color: #856404; margin-right: 8px;"),
+                  span("Waiting for administrator approval", style = "color: #856404; font-weight: 500;")
+                ),
+                div(
+                  style = "background-color: rgba(255,255,255,0.7); padding: 12px; border-radius: 6px; border-left: 3px solid #856404;",
+                  p("You will receive access once an administrator activates your account.", style = "margin: 0; font-weight: 600;")
+                )
+              )
+            } else if (user_access_status == "inactive") {
+              div(
+                style = "margin-top: 15px;",
+                div(
+                  style = "display: flex; align-items: center; margin-bottom: 8px;",
+                  tags$i(class = "fa fa-check-circle", style = "color: #28a745; margin-right: 8px;"),
+                  span("Authentication successful", style = "color: #28a745; font-weight: 500;")
+                ),
+                div(
+                  style = "display: flex; align-items: center; margin-bottom: 8px;",
+                  tags$i(class = "fa fa-check-circle", style = "color: #28a745; margin-right: 8px;"),
+                  span("Account found in database", style = "color: #28a745; font-weight: 500;")
+                ),
+                div(
+                  style = "display: flex; align-items: center; margin-bottom: 15px;",
+                  tags$i(class = "fa fa-lock", style = "color: #dc3545; margin-right: 8px;"),
+                  span("Account is deactivated", style = "color: #dc3545; font-weight: 500;")
+                ),
+                div(
+                  style = "background-color: rgba(255,255,255,0.7); padding: 12px; border-radius: 6px; border-left: 3px solid #dc3545;",
+                  p("Please contact the administrator to reactivate your account.", style = "margin: 0; font-weight: 600;")
+                )
+              )
+            } else {
+              div(
+                style = "background-color: rgba(255,255,255,0.7); padding: 12px; border-radius: 6px; border-left: 3px solid ", message_info$color, ";",
+                p("Please contact the administrator with the information below.", style = "margin: 0; font-weight: 600;")
+              )
+            }
+          ),
+          
+          # User information section with improved styling
+          div(
+            style = "background-color: #f8f9fa; padding: 15px; border-radius: 8px; border: 1px solid #dee2e6; margin-bottom: 15px;",
+            h6("👤 User Information for Admin", style = "color: #495057; margin-bottom: 15px; font-weight: 600; display: flex; align-items: center;"),
+            div(
+              style = "background-color: #ffffff; padding: 12px; border-radius: 6px; border: 1px solid #e9ecef;",
+              div(
+                style = "display: grid; grid-template-columns: auto 1fr; gap: 10px; font-family: 'Courier New', monospace; font-size: 0.9em;",
+                span("📧 Email:", style = "font-weight: 600; color: #495057;"),
+                span(current_user_id, style = "color: #007bff; word-break: break-all;"),
+                span("🔗 ID:", style = "font-weight: 600; color: #495057;"),
+                span(current_user_compress, style = "color: #6c757d; word-break: break-all;"),
+                span("📊 Status:", style = "font-weight: 600; color: #495057;"),
+                span(user_access_status, style = "color: #dc3545; font-weight: 600;"),
+                if (nrow(found_user_data) > 0) {
+                  tagList(
+                    span("🆔 User ID:", style = "font-weight: 600; color: #495057;"),
+                    span(found_user_data$users_id[1], style = "color: #28a745;"),
+                    span("✅ Active:", style = "font-weight: 600; color: #495057;"),
+                    span(as.character(found_user_data$is_active[1]), style = if(found_user_data$is_active[1]) "color: #28a745; font-weight: 600;" else "color: #dc3545; font-weight: 600;"),
+                    span("📁 Project:", style = "font-weight: 600; color: #495057;"),
+                    span(found_user_data$project[1] %||% "None", style = "color: #6c757d;"),
+                    span("🏢 Workspace:", style = "font-weight: 600; color: #495057;"),
+                    span(found_user_data$workspace_id[1] %||% "None", style = "color: #6c757d;")
+                  )
+                }
+              )
+            )
+          ),
+          
+          # Action button with improved styling
+          div(
+            style = "text-align: center;",
+            actionButton("show_tech_details", "📋 Show Technical Details", 
+                        class = "btn btn-outline-primary", 
+                        style = "border-radius: 20px; padding: 8px 20px; font-weight: 500;")
+          ),
+          
+          # Hidden technical details
+          div(id = "tech_details", style = "display: none; margin-top: 15px;",
+            div(
+              style = "background-color: #e9ecef; padding: 15px; border-radius: 8px; border: 1px solid #ced4da;",
+              h6("🔧 Technical Details", style = "color: #495057; margin-bottom: 10px;"),
+              verbatimTextOutput("select_user_str_display")
+            )
+          )
+        )
+      })
+
+      # Add debug info tab for administrators
+      tryCatch({
+        insertTab(inputId = "body_panel_id",
+                  tabPanel(value = "userData",
+                           title = "Admin Information",
+                           shinydashboard::box(title = "Administrator Actions Required",
+                                               width = 12, status = "warning", solidHeader = TRUE,
+                                               tags$div(
+                                                 style = "background-color: #fff3cd; padding: 15px; border-radius: 5px; margin-bottom: 15px;",
+                                                 h4("⚠️ User Access Management", style = "color: #856404; margin-bottom: 10px;"),
+                                                 p("This user requires administrator action to access the application.")
+                                               ),
+                                               tags$hr(),
+                                               tags$h5("User Details:"),
+                                               tags$div(style = "background-color: #f8f9fa; padding: 10px; border-radius: 3px; font-family: monospace;",
+                                                 tags$pre(paste("Email:", current_user_id)),
+                                                 tags$pre(paste("Compressed ID:", current_user_compress)),
+                                                 tags$pre(paste("Access Status:", user_access_status)),
+                                                 if (nrow(found_user_data) > 0) {
+                                                   tagList(
+                                                     tags$pre(paste("Database User ID:", found_user_data$users_id[1])),
+                                                     tags$pre(paste("Is Active:", found_user_data$is_active[1])),
+                                                     tags$pre(paste("Project:", found_user_data$project[1] %||% "None")),
+                                                     tags$pre(paste("Workspace ID:", found_user_data$workspace_id[1] %||% "None")),
+                                                     tags$pre(paste("Username:", found_user_data$username[1] %||% "None"))
+                                                   )
+                                                 }
+                                               ),
+                                               tags$hr(),
+                                               tags$h5("Administrator Actions:"),
+                                               tags$div(
+                                                 style = "background-color: #d4edda; padding: 15px; border-radius: 5px; margin-bottom: 10px;",
+                                                 h6("✅ To ACTIVATE this user:", style = "color: #155724;"),
+                                                 tags$code(paste0("UPDATE madi_track.users SET is_active = true WHERE oauth_unique_id = '", current_user_compress, "';"),
+                                                           style = "background-color: #f8f9fa; padding: 5px; border-radius: 3px; display: block; margin: 5px 0;")
+                                               ),
+                                               tags$div(
+                                                 style = "background-color: #d1ecf1; padding: 15px; border-radius: 5px; margin-bottom: 10px;",
+                                                 h6("🏢 To ASSIGN WORKSPACE (important for data access):", style = "color: #0c5460;"),
+                                                 tags$code(paste0("UPDATE madi_track.users SET workspace_id = 6101 WHERE oauth_unique_id = '", current_user_compress, "';"),
+                                                           style = "background-color: #f8f9fa; padding: 5px; border-radius: 3px; display: block; margin: 5px 0;"),
+                                                 p("Available workspace IDs: 6101, 6102, 6103, 6104, 6105, 6106", style = "color: #0c5460; font-size: 0.9em; margin: 5px 0;")
+                                               ),
+                                               tags$div(
+                                                 style = "background-color: #f8d7da; padding: 15px; border-radius: 5px; margin-bottom: 10px;",
+                                                 h6("❌ To DEACTIVATE this user:", style = "color: #721c24;"),
+                                                 tags$code(paste0("UPDATE madi_track.users SET is_active = false WHERE oauth_unique_id = '", current_user_compress, "';"),
+                                                           style = "background-color: #f8f9fa; padding: 5px; border-radius: 3px; display: block; margin: 5px 0;")
+                                               ),
+                                               tags$hr(),
+                                               tags$h5("Database Query Details:"),
+                                               verbatimTextOutput("select_user_str_display")
+                           )
+                  ),
+                  target = NULL,
+                  position = "after",
+                  select = TRUE
+        )
+      }, error = function(e) {
+        warning(paste("Failed to insert admin tab:", e$message))
+      })
+    }
+  }, error = function(e) {
+    # Global error handler for the entire user observer
+    warning(paste("CRITICAL ERROR in user observer:", e$message))
+    print(paste("Error details:", toString(e)))
+    print("Stack trace:")
+    print(traceback())
+    
+    # Set a safe fallback state
+    currentuser("System Error - Contact Admin")
+    
+    # Render error message in sidebar
+    output$primarysidepanel <- renderUI({
+      mainPanel(
+        div(
+          style = "background-color: #f8d7da; padding: 20px; border-radius: 5px; border-left: 4px solid #dc3545;",
+          h4("System Error", style = "color: #721c24;"),
+          p("An error occurred while processing your user information."),
+          p("Please contact the administrator with the following details:"),
+          tags$pre(paste("Error:", e$message), style = "background-color: #f8f9fa; padding: 10px; border-radius: 3px;"),
+          tags$pre(paste("Time:", Sys.time()), style = "background-color: #f8f9fa; padding: 10px; border-radius: 3px;")
+        )
+      )
+    })
+  })
+})
