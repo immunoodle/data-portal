@@ -4096,7 +4096,7 @@ def get_mbaa_reagents_data(conn, study_accession):
         JOIN madi_dat.expsample e ON e2r.expsample_accession = e.expsample_accession
         JOIN madi_dat.experiment exp ON e.experiment_accession = exp.experiment_accession
         WHERE exp.study_accession = %s
-        AND r.type = 'MBAA'  -- Filter for MBAA reagents only
+        AND r.type = 'Luminex xMAP'  -- Filter for MBAA reagents only/Luminex xMAP
         ORDER BY r.reagent_accession
     """
     
