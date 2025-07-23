@@ -1,6 +1,6 @@
 # MADI Data Portal
 
-A Shiny web application for managing and exploring MADI (Microbiome and Allergy Data Initiative) program data. The portal provides an interactive interface for data visualization, study management, and file uploads with secure authentication.
+A Shiny web application for managing and exploring MADI (Maternal Immunization and Determinants of Infant Immunity) program data. The portal provides an interactive interface for data visualization, study management, and file uploads with secure authentication.
 
 ## Features
 
