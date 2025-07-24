@@ -8,3 +8,4 @@
 rsconnect
 archive
 *.Rproj
+.DS_Store
