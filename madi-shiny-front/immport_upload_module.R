@@ -28,10 +28,11 @@ immport_template_choices <- local({
       'standardCurves.json', 'experimentSamples.HAI.json',
       'experimentSamples.HLA.json',
       'experimentSamples.Neutralizing_Antibody_Titer_Alt.json', # Adjusted name for Value 50
-      'experimentSamples.QRT-PCR.json', 'KIR_Typing.json', 'PCR_Results.json'
+      'experimentSamples.QRT-PCR.json', 'KIR_Typing.json', 'PCR_Results.json',
+      'experimentSamples.Virus_Neutralization.json'
   )
-  stopifnot(length(template_names) == 53)
-  setNames(as.list(1:53), template_names)
+  stopifnot(length(template_names) == 54)
+  setNames(as.list(1:54), template_names)
 })
 
 immport_upload_ui <- function() {
