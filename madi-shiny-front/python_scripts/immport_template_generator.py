@@ -49,7 +49,7 @@ def get_protocol_data(conn, study_accession):
         "templateType": "single",
         "fileName": "protocols.json",
         "name": "protocols",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -142,7 +142,7 @@ def get_study_data(conn, study_accession):
         "templateType": "compound",
         "fileName": "basic_study_design.json",
         "name": "basic_study_design",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1"
     }
     
@@ -374,7 +374,7 @@ def get_experiment_data(conn, study_accession):
         "templateType": "single",
         "fileName": "experiments.json",
         "name": "experiments",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -429,7 +429,7 @@ def get_lab_test_panel_data(conn, study_accession):
         "templateType": "single",
         "fileName": "labTestPanels.json",
         "name": "labtestpanels",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -501,7 +501,7 @@ def get_lab_test_results_data(conn, study_accession):
         "templateType": "single",
         "fileName": "labTest_Results.json",
         "name": "labtest_results",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -556,7 +556,7 @@ def get_assessment_panel_data(conn, study_accession):
         "templateType": "single",
         "fileName": "assessmentpanel.json",
         "name": "assessmentpanel",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -612,7 +612,7 @@ def get_assessment_component_data(conn, study_accession):
         "templateType": "single",
         "fileName": "assessmentcomponent.json",
         "name": "assessmentcomponent",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -696,7 +696,7 @@ def get_adverse_events_data(conn, study_accession):
         "templateType": "single",
         "fileName": "adverseEvents.json",
         "name": "adverseevents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -789,7 +789,7 @@ def get_subject_humans_data(conn, study_accession):
         "templateType": "combined-result",
         "fileName": "subjectHumans.json",
         "name": "subjecthumans",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -898,7 +898,7 @@ def get_subject_animals_data(conn, study_accession):
         "templateType": "combined-result",
         "fileName": "subjectAnimals.json",
         "name": "subjectanimals",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1007,7 +1007,7 @@ def get_biosamples_data(conn, study_accession):
         "templateType": "single",
         "fileName": "bioSamples.json",
         "name": "biosamples",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1085,7 +1085,7 @@ def get_interventions_data(conn, study_accession):
         "templateType": "single",
         "fileName": "interventions.json",
         "name": "interventions",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1172,7 +1172,7 @@ def get_immune_exposure_data(conn, study_accession):
         "templateType": "single",
         "fileName": "immuneExposure.json",
         "name": "immuneexposure",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1270,7 +1270,7 @@ def get_lab_tests_data(conn, study_accession):
         "templateType": "combined-result",
         "fileName": "labTests.json",
         "name": "labtest",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1398,7 +1398,7 @@ def get_control_samples_data(conn, study_accession):
         "templateType": "combined",
         "fileName": "controlSamples.json",
         "name": "controlsamples",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1491,7 +1491,7 @@ def get_assessments_data(conn, study_accession):
         "templateType": "combined-result",
         "fileName": "assessments.json",
         "name": "assessments",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1619,7 +1619,7 @@ def get_cytof_derived_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "CyTOF_Derived_data.json",
         "name": "cytof_derived_data",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1700,7 +1700,7 @@ def get_elisa_results_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "ELISA_Results.json",
         "name": "elisa_results",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1763,7 +1763,7 @@ def get_elispot_results_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "ELISPOT_Results.json",
         "name": "elispot_results",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1827,7 +1827,7 @@ def get_cytof_experiment_samples_data(conn, study_accession):
         "templateType": "combined-multiple",
         "fileName": "experimentSamples.CYTOF.json",
         "name": "cytof",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -1948,6 +1948,175 @@ def get_cytof_experiment_samples_data(conn, study_accession):
     return result
 
 
+def get_virus_neutralization_experiment_samples_data(conn, study_accession):
+    """
+    Retrieve Virus Neutralization experiment samples data for a given study accession and format it according to the template.
+    """
+    result = {
+        "templateType": "combined-result",
+        "fileName": "experimentSamples.Virus_Neutralization.json",
+        "name": "virus_neutralization",
+        "schemaVersion": "3.37",
+        "validationLevel": "1",
+        "data": []
+    }
+    
+    # Helper function to execute queries and fetch results
+    def execute_query(query, params=None):
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            return cur.fetchall()
+    
+    print(f"\nRetrieving virus neutralization experiment samples for study {study_accession}...")
+    
+    # Get virus neutralization experiment samples with all required data using the optimized query
+    main_query = """
+    WITH file_info AS (
+        SELECT
+            e2f.expsample_accession,
+            string_agg(DISTINCT f.name, ';') as result_files
+        FROM madi_dat.expsample_2_file_info e2f
+        JOIN madi_dat.file_info f ON e2f.file_info_id = f.file_info_id
+        GROUP BY e2f.expsample_accession
+    ),
+    reagent_info AS (
+        SELECT
+            e2r.expsample_accession,
+            string_agg(e2r.reagent_accession, ';') as reagent_ids
+        FROM madi_dat.expsample_2_reagent e2r
+        GROUP BY e2r.expsample_accession
+    ),
+    treatment_info AS (
+        SELECT
+            e2t.expsample_accession,
+            string_agg(e2t.treatment_accession, ';') as treatment_ids
+        FROM madi_dat.expsample_2_treatment e2t
+        GROUP BY e2t.expsample_accession
+    ),
+    protocol_info AS (
+        SELECT
+            e2p.experiment_accession,
+            string_agg(e2p.protocol_accession, ';') as protocol_ids
+        FROM madi_dat.experiment_2_protocol e2p
+        GROUP BY e2p.experiment_accession
+    )
+    SELECT
+        es.expsample_accession,
+        es.name as expsample_name,
+        es.description as expsample_description,
+        r.reagent_ids,
+        t.treatment_ids,
+        f.result_files,
+        b.biosample_accession,
+        b.type,
+        b.subtype,
+        b.name as biosample_name,
+        b.description as biosample_description,
+        b.subject_accession,
+        b.planned_visit_accession,
+        b.study_time_collected,
+        b.study_time_collected_unit,
+        b.study_time_t0_event,
+        b.study_time_t0_event_specify,
+        e.experiment_accession,
+        p.protocol_ids,
+        e.name as experiment_name,
+        e.description as experiment_description,
+        e.measurement_technique,
+        vn.virus_strain_reported,
+        vn.value_reported,
+        vn.unit_reported,
+        vn.comments
+    FROM madi_dat.expsample es
+    JOIN madi_dat.experiment e ON es.experiment_accession = e.experiment_accession
+    JOIN madi_dat.expsample_2_biosample e2b ON es.expsample_accession = e2b.expsample_accession
+    JOIN madi_dat.biosample b ON e2b.biosample_accession = b.biosample_accession
+    LEFT JOIN madi_dat.neut_ab_titer_result vn ON es.expsample_accession = vn.expsample_accession
+    LEFT JOIN file_info f ON es.expsample_accession = f.expsample_accession
+    LEFT JOIN reagent_info r ON es.expsample_accession = r.expsample_accession
+    LEFT JOIN treatment_info t ON es.expsample_accession = t.expsample_accession
+    LEFT JOIN protocol_info p ON e.experiment_accession = p.experiment_accession
+    WHERE e.study_accession = %s
+    AND vn.expsample_accession IS NOT NULL  -- <-- This is the corrected line
+    ORDER BY es.expsample_accession, vn.virus_strain_reported
+    """
+    
+    with conn.cursor() as cur:
+        print(f"\nRetrieving virus neutralization experiment samples for study {study_accession}...")
+        cur.execute(main_query, (study_accession,))
+        rows = cur.fetchall()
+        
+        current_sample = None
+        current_entry = None
+        
+        for row in rows:
+            expsample_id = row[0]
+            
+            # If we've moved to a new sample, create new entry
+            if expsample_id != current_sample:
+                if current_entry:
+                    result["data"].append(current_entry)
+                
+                # Create metadata section
+                metadata = {
+                    "studyId": study_accession,
+                    "expsampleId": expsample_id,
+                    "expsampleName": row[1],
+                    "expsampleDescription": row[2],
+                    "reagentIds": row[3].split(';') if row[3] else None,
+                    "treatmentIds": row[4].split(';') if row[4] else None,
+                    "additionalResultFileNames": row[5].split(';') if row[5] else None,
+                    "biosampleId": row[6],
+                    "type": row[7],
+                    "subtype": row[8],
+                    "biosampleName": row[9],
+                    "biosampleDescription": row[10],
+                    "subjectId": row[11],
+                    "plannedVisitId": row[12],
+                    "studyTimeCollected": float(row[13]) if row[13] is not None else None,
+                    "studyTimeCollectedUnit": row[14],
+                    "studyTimeT0Event": row[15],
+                    "studyTimeT0EventSpecify": row[16],
+                    "experimentId": row[17],
+                    "protocolIds": row[18].split(';') if row[18] else None,
+                    "experimentName": row[19],
+                    "experimentDescription": row[20],
+                    "measurementTechnique": row[21]
+                }
+                
+                # Remove None values from metadata
+                metadata = {k: v for k, v in metadata.items() if v is not None}
+                
+                # Initialize new entry with empty result data
+                current_entry = {
+                    "metaData": metadata,
+                    "resultData": []
+                }
+                
+                current_sample = expsample_id
+            
+            # Add result data if it exists
+            if row[22]:  # if virus_strain_reported exists
+                result_data = {
+                    "virusStrainReported": row[22],
+                    "valueReported": row[23],
+                    "unitReported": row[24]
+                }
+                
+                if row[25]:  # comments
+                    result_data["comments"] = row[25]
+                
+                current_entry["resultData"].append(result_data)
+        
+        # Add last entry if exists
+        if current_entry:
+            result["data"].append(current_entry)
+        
+        print(f"Processed {len(result['data'])} virus neutralization experiment samples")
+    
+    return result
+
+
 def get_elisa_experiment_samples_data(conn, study_accession):
     """
     Retrieve ELISA experiment samples data for a given study accession.
@@ -1956,7 +2125,7 @@ def get_elisa_experiment_samples_data(conn, study_accession):
         "templateType": "combined-result",
         "fileName": "experimentSamples.ELISA.json",
         "name": "elisa",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -2115,7 +2284,7 @@ def get_elispot_experiment_samples_data(conn, study_accession):
         "templateType": "combined-result",
         "fileName": "experimentSamples.ELISPOT.json",
         "name": "elispot",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -2274,7 +2443,7 @@ def get_flow_cytometry_experiment_samples_data(conn, study_accession):
         "templateType": "combined-multiple",
         "fileName": "experimentSamples.Flow_Cytometry.json",
         "name": "flow_cytometry",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -2414,7 +2583,7 @@ def get_mbaa_experiment_samples_data(conn, study_accession):
         "templateType": "combined-multiple",
         "fileName": "experimentSamples.MBAA.json",
         "name": "mbaa",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -2569,7 +2738,7 @@ def get_neut_antibody_titer_experiment_samples_data(conn, study_accession):
         "templateType": "combined-result",
         "fileName": "experimentSamples.Neutralizing_Antibody_Titer.json",
         "name": "neutralizing_antibody_titer",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -2745,7 +2914,7 @@ def get_hai_results_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "HAI_Results.json",
         "name": "hai_results",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -2813,7 +2982,7 @@ def get_hla_typing_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "HLA_Typing.json",
         "name": "hla_typing",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -2918,7 +3087,7 @@ def get_mbaa_results_data(conn, study_accession):
         "templateType": "single",
         "fileName": "MBAA_Results.json",
         "name": "mbaa_results",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3079,7 +3248,7 @@ def get_treatments_data(conn, study_accession):
         "templateType": "single",
         "fileName": "treatments.json",
         "name": "treatments",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3164,7 +3333,7 @@ def get_virus_neutralization_results_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "Virus_Neutralization_Results.json",
         "name": "virus_neutralization_results",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3231,7 +3400,7 @@ def get_public_repositories_data(conn, study_accession):
         "templateType": "single",
         "fileName": "publicRepositories.json",
         "name": "public_repositories",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3285,7 +3454,7 @@ def get_reagent_sets_data(conn, study_accession):
         "templateType": "single",
         "fileName": "Reagent_Sets.json",
         "name": "reagent_sets",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3368,7 +3537,7 @@ def get_array_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.Array.json",
         "name": "array_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3446,7 +3615,7 @@ def get_cytof_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.CyTOF.json",
         "name": "cytof_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3543,7 +3712,7 @@ def get_elisa_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.ELISA.json",
         "name": "elisa_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3634,7 +3803,7 @@ def get_elispot_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.ELISPOT.json",
         "name": "elispot_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3725,7 +3894,7 @@ def get_flow_cytometry_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.Flow_Cytometry.json",
         "name": "flow_cytometry_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3822,7 +3991,7 @@ def get_hai_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.HAI.json",
         "name": "hai_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3906,7 +4075,7 @@ def get_hla_typing_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.HLA_Typing.json",
         "name": "hla_typing_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -3990,7 +4159,7 @@ def get_kir_typing_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.KIR_Typing.json",
         "name": "kir_typing_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -4074,7 +4243,7 @@ def get_mbaa_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.MBAA.json",
         "name": "mbaa_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -4161,7 +4330,7 @@ def get_neutralizing_antibody_titer_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.Neutralizing_Antibody_Titer.json",
         "name": "neutralizing_antibody_titer_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -4245,7 +4414,7 @@ def get_other_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.Other.json",
         "name": "other_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -4333,7 +4502,7 @@ def get_pcr_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.PCR.json",
         "name": "pcr_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -4417,7 +4586,7 @@ def get_sequencing_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.Sequencing.json",
         "name": "sequencing_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -4501,7 +4670,7 @@ def get_virus_neutralization_reagents_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "reagents.Virus_Neutralization.json",
         "name": "virus_neutralization_reagents",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -4586,7 +4755,7 @@ def get_rna_seq_results_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "RNA_SEQ_Results.json",
         "name": "rna_seq_results",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -4662,7 +4831,7 @@ def get_standard_curves_data(conn, study_accession):
         "templateType": "combined",
         "fileName": "standardCurves.json",
         "name": "standardcurves",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -4843,14 +5012,14 @@ def get_hai_experiment_samples_data(conn, study_accession):
         "templateType": "combined-result",
         "fileName": "experimentSamples.HAI.json",
         "name": "hai",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
     
     query = """
         WITH file_info AS (
-            SELECT 
+            SELECT
                 e2f.expsample_accession,
                 string_agg(DISTINCT f.name, ';') as result_files
             FROM madi_dat.expsample_2_file_info e2f
@@ -4858,27 +5027,27 @@ def get_hai_experiment_samples_data(conn, study_accession):
             GROUP BY e2f.expsample_accession
         ),
         reagent_info AS (
-            SELECT 
+            SELECT
                 e2r.expsample_accession,
                 string_agg(e2r.reagent_accession, ';') as reagent_ids
             FROM madi_dat.expsample_2_reagent e2r
             GROUP BY e2r.expsample_accession
         ),
         treatment_info AS (
-            SELECT 
+            SELECT
                 e2t.expsample_accession,
                 string_agg(e2t.treatment_accession, ';') as treatment_ids
             FROM madi_dat.expsample_2_treatment e2t
             GROUP BY e2t.expsample_accession
         ),
         protocol_info AS (
-            SELECT 
+            SELECT
                 e2p.experiment_accession,
                 string_agg(e2p.protocol_accession, ';') as protocol_ids
             FROM madi_dat.experiment_2_protocol e2p
             GROUP BY e2p.experiment_accession
         )
-        SELECT 
+        SELECT
             es.expsample_accession,
             es.name as expsample_name,
             es.description as expsample_description,
@@ -4915,7 +5084,7 @@ def get_hai_experiment_samples_data(conn, study_accession):
         LEFT JOIN treatment_info t ON es.expsample_accession = t.expsample_accession
         LEFT JOIN protocol_info p ON e.experiment_accession = p.experiment_accession
         WHERE e.study_accession = %s
-        AND e.measurement_technique = 'HAI'
+        AND es.result_schema = 'HAI'
         ORDER BY es.expsample_accession
     """
     
@@ -5009,7 +5178,7 @@ def get_hla_experiment_samples_data(conn, study_accession):
         "templateType": "combined-multiple",
         "fileName": "experimentSamples.HLA.json",
         "name": "hla",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -5146,7 +5315,7 @@ def get_neutralizing_antibody_titer_experiment_samples_data(conn, study_accessio
         "templateType": "combined-result",
         "fileName": "experimentSamples.Neutralizing_Antibody_Titer.json",
         "name": "neutralizing_antibody_titer",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -5314,7 +5483,7 @@ def get_qrt_pcr_experiment_samples_data(conn, study_accession):
         "templateType": "combined-result",
         "fileName": "experimentSamples.QRT-PCR.json",
         "name": "qrt-pcr",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -5495,7 +5664,7 @@ def get_kir_typing_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "KIR_Typing.json",
         "name": "kir_typing",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -5561,7 +5730,7 @@ def get_pcr_results_data(conn, study_accession):
         "templateType": "multiple",
         "fileName": "PCR_Results.json",
         "name": "pcr_results",
-        "schemaVersion": "3.36",
+        "schemaVersion": "3.37",
         "validationLevel": "1",
         "data": []
     }
@@ -5736,7 +5905,8 @@ def process_and_return_data_py(study_accession_str, file_numbers_list_str):
         50: ('experimentSamples.Neutralizing_Antibody_Titer.json', get_neutralizing_antibody_titer_experiment_samples_data),
         51: ('experimentSamples.QRT-PCR.json',  get_qrt_pcr_experiment_samples_data),
         52: ('KIR_Typing.json', get_kir_typing_data),
-        53: ('PCR_Results.json', get_pcr_results_data)
+        53: ('PCR_Results.json', get_pcr_results_data),
+        54: ('experimentSamples.Virus_Neutralization.json', get_virus_neutralization_experiment_samples_data)
 
     }
 
