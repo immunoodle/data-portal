@@ -52,7 +52,7 @@ categorization <- reactive({
 
 #List of mandatory fields for submission
 fieldsMandatory_cate <- c(
-  # "study_categorization_id", 
+  # study_categorization_id is auto-generated, not mandatory
   "research_focus", "study_accession")
 
 #define which input fields are mandatory 
@@ -114,7 +114,7 @@ entry_form_cate <- function(button_id_cate){
 #save form data into data_frame format
 formData_cate <- reactive({
   formData_cate <- data.frame(
-                         # study_categorization_id = input$study_categorization_id,
+                         # study_categorization_id is auto-generated, don't include it
                          research_focus = input$research_focus,
                          study_accession = input$study_accession,
                          stringsAsFactors = FALSE)
@@ -122,16 +122,16 @@ formData_cate <- reactive({
 })
 
 #Add data
-# appendData_cate <- function(data){
-#   dbSendQuery(conn,paste0("INSERT INTO study_categorization (
-#   study_categorization_id, research_focus, study_accession)
-# 	VALUES ('", input$study_categorization_id, "', 
-#                           '", input$research_focus, 
-#                           "', '", input$study_accession, 
-#                           "');"))
-# }
 appendData_cate <- function(data){
-  update_db(operation = "insert", db_data = data, table_name = "study_categorization")
+  # Use PostgreSQL-style parameterized query
+  sql_insert <- "INSERT INTO madi_dat.study_categorization (research_focus, study_accession) VALUES ($1, $2)"
+  
+  tryCatch({
+    result <- DBI::dbExecute(conn, sql_insert, params = list(data$research_focus, data$study_accession))
+    print(paste("Study categorization inserted successfully! Rows affected:", result))
+  }, error = function(e) {
+    print(paste("SQL categorization insert failed:", e$message))
+  })
 }
 
 observeEvent(input$add_button_cate, priority = 20,{

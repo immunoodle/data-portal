@@ -31,24 +31,40 @@ Sys.setenv(LOCAL_DEV = "0")
 # Increased max file upload size
 options(shiny.maxRequestSize = 100*1024^2)
 
-conn <- dbConnect(RPostgres::Postgres(), dbname = Sys.getenv("db"),
-                  host=Sys.getenv("db_host"), port=Sys.getenv("db_port"), user=Sys.getenv("db_userid_x"),
-                  password=Sys.getenv("db_pwd_x"), options="-c search_path=madi_dat")
+# Source database setup functions
+source("database_setup.R", local = FALSE)
+
+# Create database connection
+conn <- create_safe_db_connection()
 
 # load the endpoints object
 endpoints <- readRDS('endpoints.rds')
 
-# get madi_track.users
-users <- DBI::dbGetQuery(conn, "SELECT oauth_unique_id, username, workspace_id, display_name, project, full_name, CAST(users_id AS INTEGER) AS users_id FROM madi_track.users;")
+# get madi_track.users with error handling
+users <- tryCatch({
+  DBI::dbGetQuery(conn, "SELECT oauth_unique_id, username, workspace_id, display_name, project, full_name, CAST(users_id AS INTEGER) AS users_id FROM madi_track.users;")
+}, error = function(e) {
+  warning("Could not load users table: ", e$message)
+  data.frame(oauth_unique_id = character(0), username = character(0), workspace_id = numeric(0), 
+             display_name = character(0), project = character(0), full_name = character(0), 
+             users_id = integer(0), stringsAsFactors = FALSE)
+})
 
-# get list of studies in the MADI Program
-madi_study_list <- DBI::dbGetQuery(conn, "SELECT study_accession, brief_title FROM madi_dat.study WHERE workspace_id in (6101,6102,6103,6104,6105,6106);")
+# Initialize with empty study lists - will be populated based on user workspace after authentication
+all_study_list <- data.frame(study_accession = character(0), brief_title = character(0), stringsAsFactors = FALSE)
 
-# explorer parameters table: madi_meta.explore_parms
-parameter_df <- DBI::dbGetQuery(conn, "SELECT explore_parm_id, child_table, table_src_query, parent_table, match_query_on, tab_label, tree_level FROM madi_meta.explore_parms ORDER BY parent_table, child_table;")
+# explorer parameters table: madi_meta.explore_parms with error handling
+parameter_df <- tryCatch({
+  DBI::dbGetQuery(conn, "SELECT explore_parm_id, child_table, table_src_query, parent_table, match_query_on, tab_label, tree_level FROM madi_meta.explore_parms ORDER BY parent_table, child_table;")
+}, error = function(e) {
+  warning("Could not load parameter_df: ", e$message)
+  data.frame(explore_parm_id = integer(0), child_table = character(0), table_src_query = character(0), 
+             parent_table = character(0), match_query_on = character(0), tab_label = character(0), 
+             tree_level = integer(0), stringsAsFactors = FALSE)
+})
 
-# madi_dat.studies_shiny
-study <- DBI::dbGetQuery(conn, "SELECT study_accession, madi_program, brief_title, research_focus, condition_preferred, sponsoring_organization, clinical_trial, have_assessment, have_test, actual_enrollment, type, measurement_technique, species, sex, 'study' AS tree_id FROM madi_dat.studies_shiny;")
+# Initialize with empty study data - will be populated based on user workspace after authentication
+study <- create_empty_studies_dataframe()
 
 print("Sourcing auth_config.R...")
 source("auth_config.R", local = FALSE) # Source globally
@@ -346,6 +362,16 @@ server <- function(input, output, session) {
   )
 
   jwks_cache <- reactiveVal(NULL)
+  
+  # Global reactive triggers for UI updates
+  current_workspace <- reactiveVal(NULL)  # Track current workspace
+  studies_trigger <- reactiveVal(0)
+  workspace_list_trigger <- reactiveVal(0)
+  access_keys_trigger <- reactiveVal(0)
+  
+  # Flag to prevent infinite loops in workspace observer
+  workspace_update_in_progress <- reactiveVal(FALSE)
+  
   session$userData$callbackCode <- NULL
   session$userData$callbackState <- NULL
   session$userData$processedOIDCState <- FALSE
@@ -774,44 +800,64 @@ server <- function(input, output, session) {
       source("study_link.R", local = TRUE)
       source("reagent.R", local = TRUE)
       source("send_message.R", local = TRUE)
-      source("add_program.R", local = TRUE)
-      source("add_personnel.R", local = TRUE)
-      source("program_2_personnel.R", local = TRUE)
       source("study_personnel.R", local = TRUE)
-      source("add_users.R", local = TRUE)
-      source("add_workspace.R", local = TRUE)
+      source("workspace_access.R", local = TRUE)
       source("immport_upload_module.R", local = TRUE)
       source("immport_server_logic.R", local = TRUE)
 
+      # --- USER WORKSPACE FILTERING LOGIC ---
+      # Now that user is authenticated, get their workspace and filter studies accordingly
+      print("DEBUG: Setting up user workspace filtering for authenticated user")
+      
+      # Get current user's workspace from the users table
+      current_user_email <- ud$email
+      if (!is.null(current_user_email) && nzchar(current_user_email)) {
+        current_user_compress <- gsub("[[:punct:][:blank:]]+", "", current_user_email)
+        
+        # Query user's workspace
+        user_workspace_result <- tryCatch({
+          DBI::dbGetQuery(conn, "
+            SELECT workspace_id, project, full_name 
+            FROM madi_track.users 
+            WHERE regexp_replace(oauth_unique_id, '[[:punct:][:blank:]]', '', 'g') = $1;", 
+            params = list(current_user_compress))
+        }, error = function(e) {
+          warning("Failed to get user workspace: ", e$message)
+          data.frame(workspace_id = numeric(0), project = character(0), full_name = character(0))
+        })
+        
+        if (nrow(user_workspace_result) > 0 && !is.na(user_workspace_result$workspace_id[1])) {
+          user_workspace_id <- user_workspace_result$workspace_id[1]
+          print(paste("DEBUG: User workspace ID:", user_workspace_id))
+          
+          # Refresh study data with user's workspace filtering
+          print("DEBUG: Refreshing study data with user workspace filtering")
+          study <<- get_studies_data_direct(conn, user_workspace_id)
+          all_study_list <<- get_user_workspace_studies(conn, user_workspace_id)
+          
+          print(paste("DEBUG: Found", nrow(study), "studies in user's workspace", user_workspace_id))
+          
+          # Store user workspace for use in other parts of the app
+          session$userData$user_workspace_id <- user_workspace_id
+          
+          # Set the global current workspace reactive value
+          current_workspace(user_workspace_id)
+          
+        } else {
+          print("DEBUG: No workspace assigned to user - showing no studies")
+          study <<- create_empty_studies_dataframe()
+          all_study_list <<- data.frame(study_accession = character(0), brief_title = character(0), stringsAsFactors = FALSE)
+          session$userData$user_workspace_id <- NULL
+          
+          # Clear the current workspace
+          current_workspace(NULL)
+        }
+      }
+
       initialization_script_path <- "R_helpers/initialize_reticulate_python.R"
       if(file.exists(initialization_script_path)) {
-        showModal(modalDialog(
-    title = "Initializing Python Environment",
-    div(
-      style = "text-align: center; padding: 20px;",
-      tags$div(
-        class = "progress",
-        style = "margin-bottom: 15px;",
-        tags$div(
-          class = "progress-bar progress-bar-striped progress-bar-animated",
-          role = "progressbar",
-          style = "width: 100%",
-          "Loading..."
-        )
-      ),
-      p("Please wait while the Python environment is being initialized...")
-    ),
-    footer = NULL,
-    easyClose = FALSE,
-    fade = TRUE
-  ))
-
-        source(initialization_script_path)
+        source(initialization_script_path, local = TRUE)
         print("DEBUG: Python initialization script sourced successfully.")
-        removeModal()
-      } else {
-        stop(paste("CRITICAL: Python initialization script not found at:", initialization_script_path,
-                   "Please check the file path. Current working directory:", getwd()))
       }
       
       if (!isTRUE(session$userData$ui_update_triggered)) {
@@ -827,6 +873,47 @@ server <- function(input, output, session) {
       session$userData$ui_update_triggered <- FALSE
     }
   })
+
+  # Observer to refresh studies when workspace changes
+  observeEvent(current_workspace(), {
+    # Only run this observer if user is authenticated
+    if (!isTRUE(user_data()$is_authenticated)) {
+      return()
+    }
+    
+    # Prevent infinite loops
+    if (isTRUE(workspace_update_in_progress())) {
+      return()
+    }
+    
+    current_workspace_id <- current_workspace()
+    
+    if (!is.null(current_workspace_id)) {
+      print(paste("DEBUG: Workspace changed to:", current_workspace_id))
+      print("DEBUG: Refreshing study data for new workspace")
+      
+      # Set flag to prevent loops
+      workspace_update_in_progress(TRUE)
+      
+      tryCatch({
+        # Refresh global study data
+        study <<- get_studies_data_direct(conn, current_workspace_id)
+        all_study_list <<- get_user_workspace_studies(conn, current_workspace_id)
+        
+        print(paste("DEBUG: Study data refreshed - found", nrow(study), "studies"))
+        
+        # Trigger UI refresh for studies AND workspace UI components
+        studies_trigger(studies_trigger() + 1)
+        workspace_list_trigger(workspace_list_trigger() + 1)
+        
+      }, error = function(e) {
+        print(paste("DEBUG: Error refreshing study data for workspace", current_workspace_id, ":", e$message))
+      }, finally = {
+        # Always reset the flag
+        workspace_update_in_progress(FALSE)
+      })
+    }
+  }, ignoreNULL = TRUE, ignoreInit = TRUE)
 
   output$userpanel <- renderUI({
     ud <- user_data()

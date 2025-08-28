@@ -27,7 +27,7 @@ observe( {
     tagList(
       selectInput("getTemplate_selectStudy",
                   "Select Existing Study Accession",
-                  choices = c("Click here", unique(madi_study_list$study_accession)), selected = NULL, multiple = FALSE)
+                  choices = c("Click here", unique(all_study_list$study_accession)), selected = NULL, multiple = FALSE)
       , conditionalPanel(
         condition = "input.getTemplate_selectStudy != 'Click here'"
         , radioButtons("rb_templates", "Please choose primary templates that are necessary 
@@ -79,7 +79,7 @@ observe( {
     tagList(
       selectInput("addData_selectStudy",
                   "Select Existing Study Accession",
-                  choices = c("Click here", unique(madi_study_list$study_accession)), selected = NULL, multiple = FALSE)
+                  choices = c("Click here", unique(all_study_list$study_accession)), selected = NULL, multiple = FALSE)
       , conditionalPanel(
         condition = "input.addData_selectStudy != 'Click here'"
         ,fileInput("upload_to_shiny"
@@ -323,7 +323,7 @@ observeEvent(input$upload_to_server, {
 observeEvent(input$body_panel_id, {
   if (input$body_panel_id == "getBlankTemplatePanel"){
     updateSelectInput(session, "addData_selectStudy"
-                      , choices = c("Click here", unique(madi_study_list$study_accession))
+                      , choices = c("Click here", unique(all_study_list$study_accession))
                       , selected = NULL)
     output$rows_in_preview = NULL
     rv_data$data <- NULL
@@ -343,7 +343,7 @@ observeEvent(input$body_panel_id, {
   }
   if (input$body_panel_id == "addData2Study"){
     updateSelectInput(session, "getTemplate_selectStudy"
-                      , choices = c("Click here", unique(madi_study_list$study_accession))
+                      , choices = c("Click here", unique(all_study_list$study_accession))
                       , selected = NULL)
     upload_state_value$upload_state <- 'reset'
     updateActionButton(session, inputId = "upload_to_server", label = "Click to upload template")
