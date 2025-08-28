@@ -205,15 +205,33 @@ create_table_and_module <- function(new_table_name, selected_row){
     
     ### Fill the output table with values
     table_value <- reactive({
-      out <- dbGetQuery(conn, paste0(params$table_src_query, "'", selected_row[[params$match_query_on]],"';"))
-      if(new_table_name == "study_link") {
-         arp_i <- out$value
-         if_else(nchar(arp_i) > 5,
-           if_else(startsWith(arp_i, "http"),out$value <- createLink(arp_i),arp_i),
-           if_else(startsWith(arp_i, "ftp"),out$value <- createLink(arp_i),arp_i)
-           )
-      }
-      return(out)
+      tryCatch({
+        out <- dbGetQuery(conn, paste0(params$table_src_query, "'", selected_row[[params$match_query_on]],"';"))
+        
+        # Handle empty results safely
+        if (nrow(out) == 0) {
+          return(out)
+        }
+        
+        if(new_table_name == "study_link" && "value" %in% names(out)) {
+          # Only process if we have data and the value column exists
+          if (nrow(out) > 0) {
+            for (i in seq_len(nrow(out))) {
+              arp_i <- out$value[i]
+              if (!is.na(arp_i) && nchar(arp_i) > 5) {
+                if (startsWith(arp_i, "http") || startsWith(arp_i, "ftp")) {
+                  out$value[i] <- createLink(arp_i)
+                }
+              }
+            }
+          }
+        }
+        return(out)
+      }, error = function(e) {
+        warning(paste("Error in table_value for", new_table_name, ":", e$message))
+        # Return empty data frame with at least one column to prevent errors
+        return(data.frame(message = paste("Error loading", new_table_name, "data")))
+      })
     })
     
     # if the output table is not empty, then insert a tab for the new table and fill the table

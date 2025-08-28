@@ -9,7 +9,7 @@ observe( {
           solidHeader = T, collapsible = F,
           selectInput("reagent_study",
                       "Select Existing Study Accession",
-                      choices = c("Click here", unique(madi_study_list$study_accession)), selected = NULL, multiple = FALSE)
+                      choices = c("Click here", unique(all_study_list$study_accession)), selected = NULL, multiple = FALSE)
           , conditionalPanel(
             condition = "input.reagent_study != 'Click here'",
           DT::dataTableOutput("reagent_table"), #newstudy_table

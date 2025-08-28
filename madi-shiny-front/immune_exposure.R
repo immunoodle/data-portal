@@ -1,27 +1,64 @@
 ### immune exposure tab
 
-observe( {
-  req(input$rb_add == "immuneExposure") #createStudy
-  output$createImmuExpo <- renderUI({ #createNewStudy
-    tagList(
-      br(), 
-      shinydashboard::box(title = "MADI Program Studies:", width = 12,  status = "primary", 
-                          solidHeader = T, collapsible = F,
-                          DT::dataTableOutput("immuexpo_table"), #newstudy_table
-                          actionButton("add_button_ie", "Add", icon("plus")),
-                          actionButton("edit_button_ie", "Edit", icon("edit")),
-                          br(),
-                          actionButton("close_button_ie", "Close Tab", icon("xmark"))
+observe({
+  req(input$rb_add)
+  if(input$rb_add == "immuneExposure") { #createStudy
+    output$createImmuExpo <- renderUI({ #createNewStudy
+      tagList(
+        br(), 
+        shinydashboard::box(title = "MADI Program Studies:", width = 12,  status = "primary", 
+                            solidHeader = T, collapsible = F,
+                            DT::dataTableOutput("immuexpo_table"), #newstudy_table
+                            actionButton("add_button_ie", "Add", icon("plus")),
+                            actionButton("edit_button_ie", "Edit", icon("edit"))
+        ),
+        br(),
+        actionButton("close_button_ie", "Close Tab", icon("xmark"))
       )
-    )
-  })
-  insertTab(inputId = "body_panel_id",
-            tabPanel(value = "ImmuExpoPanel" #createStudy
-                     , title = "Immune Exposure" #Create New Study
-                     , uiOutput("createImmuExpo"))) #createNewStudy
-} )
+    })
+    insertTab(inputId = "body_panel_id",
+              tabPanel(value = "ImmuExpoPanel" #createStudy
+                       , title = "Immune Exposure" #Create New Study
+                       , uiOutput("createImmuExpo"))) #createNewStudy
+  }
+})
 
 #Label mandatory fields
+labelMandatory <- function(label) {
+  tagList(
+    label,
+    span("*", class = "mandatory_star")
+  )
+}
+
+appCSS <- ".mandatory_star { color: red; }"
+
+#load users and make reactive to inputs  
+immuexpo <- reactive({ #newstudy
+  input$submit_ie
+  input$submit_edit_ie
+  
+  # Get user's workspace ID from session data
+  user_workspace <- session$userData$user_workspace_id
+  if (is.null(user_workspace)) {
+    return(data.frame())
+  }
+  
+  ie_query <- paste0("SELECT exposure_accession, arm_or_cohort.arm_accession, disease_ontology_id,
+                               disease_preferred, disease_reported, disease_stage_preferred,
+                               disease_stage_reported, exposure_material_id, exposure_material_preferred,
+                               exposure_material_reported, exposure_process_preferred,
+                               exposure_process_reported, subject_accession
+    FROM madi_dat.immune_exposure
+    INNER JOIN madi_dat.arm_or_cohort
+    ON immune_exposure.arm_accession = arm_or_cohort.arm_accession
+    WHERE workspace_id = $1
+    AND study_accession = $2;")
+  DBI::dbGetQuery(conn, ie_query, params = list(user_workspace, selected_study_accession()))
+})
+
+#List of mandatory fields for submission
+fieldsMandatory <- c("exposure_accession", "disease_reported")
 labelMandatory <- function(label) {
   tagList(
     label,
@@ -43,9 +80,9 @@ immuexpo <- reactive({ #newstudy
     FROM madi_dat.immune_exposure
     INNER JOIN madi_dat.arm_or_cohort
     ON immune_exposure.arm_accession = arm_or_cohort.arm_accession
-    WHERE workspace_id IN (6101,6102,6103,6104,6105)
-    AND study_accession IN ('", selected_study_accession(), "');")
-  immuexpo <- DBI::dbGetQuery(conn, ie_query)
+    WHERE workspace_id = $1
+    AND study_accession = $2;")
+  immuexpo <- DBI::dbGetQuery(conn, ie_query, params = list(user_workspace, selected_study_accession()))
 }) 
 
 #List of mandatory fields for submission
@@ -85,11 +122,18 @@ entry_form_ie <- function(button_id_ie){
                 width = 6,
                 
                 textInput("exposure_accession", labelMandatory("Exposure Accession"), value=DBI::dbGetQuery(conn,"SELECT CONCAT(MAX(CAST(SUBSTRING(exposure_accession,4) AS INTEGER))+1) AS next_exposure_accession FROM madi_dat.immune_exposure;")),
-                selectInput("arm_accession", labelMandatory("Arm Accession"), selected=NULL, choices = DBI::dbGetQuery(conn,"SELECT arm_or_cohort.arm_accession 
+                selectInput("arm_accession", labelMandatory("Arm Accession"), selected=NULL, choices = {
+                  user_workspace <- session$userData$user_workspace_id
+                  if (!is.null(user_workspace)) {
+                    DBI::dbGetQuery(conn,"SELECT arm_or_cohort.arm_accession 
     FROM madi_dat.immune_exposure
 	  INNER JOIN madi_dat.arm_or_cohort
     ON immune_exposure.arm_accession = arm_or_cohort.arm_accession
-    WHERE workspace_id IN (6101,6102,6103,6104,6105);")),
+    WHERE workspace_id = $1;", params = list(user_workspace))
+                  } else {
+                    character(0)
+                  }
+                }),
                 textInput("disease_ontology_id", "Disease Ontology ID", placeholder = ""),
                 textInput("disease_preferred", "Disease Preferred", placeholder = ""),
                 textInput("disease_reported", "Disease Reported", placeholder = ""),
@@ -173,6 +217,13 @@ observeEvent(input$submit_ie, priority = 20,{
 
 #edit data
 observeEvent(input$edit_button_ie, priority = 20,{
+  # Get user's workspace ID from session data
+  user_workspace <- session$userData$user_workspace_id
+  if (is.null(user_workspace)) {
+    showNotification("No workspace assigned to user", type = "error")
+    return()
+  }
+  
   SQL_df <- DBI::dbGetQuery(conn, "SELECT exposure_accession, arm_or_cohort.arm_accession, disease_ontology_id,
                                disease_preferred, disease_reported, disease_stage_preferred,
                                disease_stage_reported, exposure_material_id, exposure_material_preferred,
@@ -181,7 +232,7 @@ observeEvent(input$edit_button_ie, priority = 20,{
     FROM madi_dat.immune_exposure
     INNER JOIN madi_dat.arm_or_cohort
     ON immune_exposure.arm_accession = arm_or_cohort.arm_accession
-    WHERE workspace_id IN (6101,6102,6103,6104,6105);")
+    WHERE workspace_id = $1;", params = list(user_workspace))
   showModal(
     if(length(input$immuexpo_table_rows_selected) > 1 ){
       modalDialog(
@@ -212,6 +263,13 @@ observeEvent(input$edit_button_ie, priority = 20,{
 })
 
 observeEvent(input$submit_edit_ie, priority = 20, {
+  # Get user's workspace ID from session data
+  user_workspace <- session$userData$user_workspace_id
+  if (is.null(user_workspace)) {
+    showNotification("No workspace assigned to user", type = "error")
+    return()
+  }
+  
   getQuery_str_ie <- "SELECT exposure_accession, arm_or_cohort.arm_accession, disease_ontology_id,
                                disease_preferred, disease_reported, disease_stage_preferred,
                                disease_stage_reported, exposure_material_id, exposure_material_preferred,
@@ -220,8 +278,8 @@ observeEvent(input$submit_edit_ie, priority = 20, {
     FROM madi_dat.immune_exposure
     INNER JOIN madi_dat.arm_or_cohort
     ON immune_exposure.arm_accession = arm_or_cohort.arm_accession
-    WHERE workspace_id IN (6101,6102,6103,6104,6105);"
-  SQL_df_ie <- DBI::dbGetQuery(conn, getQuery_str_ie)
+    WHERE workspace_id = $1;"
+  SQL_df_ie <- DBI::dbGetQuery(conn, getQuery_str_ie, params = list(user_workspace))
   row_select_ie <- SQL_df_ie[input$immuexpo_table_rows_selected, "exposure_accession"]
   row_selection_ie <- dbQuoteLiteral(conn, row_select_ie)
   

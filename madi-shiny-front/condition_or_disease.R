@@ -179,23 +179,39 @@ observeEvent(input$edit_button_cd, priority = 20,{
     })
   if(length(input$condition_or_disease_table_rows_selected) == 1 ){
     entry_form_cd("submit_edit_cd")
-    updateSelectInput(session, "study_accession", choices = DBI::dbGetQuery(conn,"SELECT study.study_accession 
+    
+    # Get user's workspace ID for study choices
+    user_workspace <- session$userData$user_workspace_id
+    study_choices <- if (!is.null(user_workspace)) {
+      DBI::dbGetQuery(conn,"SELECT study.study_accession 
     FROM madi_dat.study_2_condition_or_disease 
 	  INNER JOIN madi_dat.study
     ON study.study_accession = study_2_condition_or_disease.study_accession
-    WHERE workspace_id IN (6101,6102,6103,6104,6105);"))
+    WHERE workspace_id = $1;", params = list(user_workspace))
+    } else {
+      character(0)
+    }
+    
+    updateSelectInput(session, "study_accession", choices = study_choices)
     updateTextInput(session, "condition_reported", value = SQL_df[input$condition_or_disease_table_rows_selected, "condition_reported"])
     updateTextInput(session, "condition_preferred", value = SQL_df[input$condition_or_disease_table_rows_selected, "condition_preferred"])
   }
 })
 
 observeEvent(input$submit_edit_cd, priority = 20, {
+  # Get user's workspace ID from session data
+  user_workspace <- session$userData$user_workspace_id
+  if (is.null(user_workspace)) {
+    showNotification("No workspace assigned to user", type = "error")
+    return()
+  }
+  
   getQuery_str <- "SELECT study.study_accession, condition_reported, condition_preferred
 	FROM madi_dat.study_2_condition_or_disease 
 	INNER JOIN madi_dat.study
   ON study.study_accession = study_2_condition_or_disease.study_accession
-  WHERE workspace_id IN (6101,6102,6103,6104,6105);"
-  SQL_df <- DBI::dbGetQuery(conn, getQuery_str)
+  WHERE workspace_id = $1;"
+  SQL_df <- DBI::dbGetQuery(conn, getQuery_str, params = list(user_workspace))
   row_select_cd <- SQL_df[input$condition_or_disease_table_row_last_clicked, "study_accession"]
   row_selection_cd <- dbQuoteLiteral(conn, row_select_cd)
   

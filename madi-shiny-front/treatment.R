@@ -38,11 +38,23 @@ treatment <- reactiveVal({
   # input$submit_add_tr
   # input$submit_edit_tr
   
-  tr_select_query<-paste0("SELECT treatment_accession, amount_unit, amount_value, comments,
-                               duration_unit, duration_value, name, temperature_unit, temperature_value, workspace_id
-	FROM madi_dat.treatment WHERE workspace_id IN (6101,6102,6103,6104,6105);")
+  # Get user's workspace ID from session data
+  user_workspace <- session$userData$user_workspace_id
+  if (is.null(user_workspace)) {
+    # Fallback to empty data if no workspace assigned
+    return(data.frame(treatment_accession = character(0), amount_unit = character(0), 
+                     amount_value = numeric(0), comments = character(0),
+                     duration_unit = character(0), duration_value = numeric(0), 
+                     name = character(0), temperature_unit = character(0), 
+                     temperature_value = numeric(0), workspace_id = numeric(0),
+                     stringsAsFactors = FALSE))
+  }
   
-  treatment <- DBI::dbGetQuery(conn, tr_select_query)
+  tr_select_query <- paste0("SELECT treatment_accession, amount_unit, amount_value, comments,
+                               duration_unit, duration_value, name, temperature_unit, temperature_value, workspace_id
+	FROM madi_dat.treatment WHERE workspace_id = $1;")
+  
+  treatment <- DBI::dbGetQuery(conn, tr_select_query, params = list(user_workspace))
 })
 
 #List of mandatory fields for submission
@@ -153,11 +165,24 @@ observeEvent(input$submit_add_tr, priority = 20,{
   shinyjs::reset("entry_form_tr")
   removeModal()
   # treatment(update_db(operation="select", table_name="treatment"))
-  tr_select_query<-paste0("SELECT treatment_accession, amount_unit, amount_value, comments,
-                               duration_unit, duration_value, name, temperature_unit, temperature_value, workspace_id
-	FROM madi_dat.treatment WHERE workspace_id IN (6101,6102,6103,6104,6105);")
   
-  treatment(DBI::dbGetQuery(conn, tr_select_query))
+  # Get user's workspace ID from session data
+  user_workspace <- session$userData$user_workspace_id
+  if (!is.null(user_workspace)) {
+    tr_select_query <- paste0("SELECT treatment_accession, amount_unit, amount_value, comments,
+                                 duration_unit, duration_value, name, temperature_unit, temperature_value, workspace_id
+      FROM madi_dat.treatment WHERE workspace_id = $1;")
+    
+    treatment(DBI::dbGetQuery(conn, tr_select_query, params = list(user_workspace)))
+  } else {
+    # No workspace assigned - set empty data
+    treatment(data.frame(treatment_accession = character(0), amount_unit = character(0), 
+                        amount_value = numeric(0), comments = character(0),
+                        duration_unit = character(0), duration_value = numeric(0), 
+                        name = character(0), temperature_unit = character(0), 
+                        temperature_value = numeric(0), workspace_id = numeric(0),
+                        stringsAsFactors = FALSE))
+  }
 })
 
 observeEvent(input$treatment_table_rows_selected, {
@@ -167,17 +192,24 @@ observeEvent(input$treatment_table_rows_selected, {
 #edit data
 observeEvent(input$edit_button_tr, priority = 20,{
   
+  # Get user's workspace ID from session data
+  user_workspace <- session$userData$user_workspace_id
+  if (is.null(user_workspace)) {
+    showNotification("No workspace assigned to user", type = "error")
+    return()
+  }
+  
   tr_edit_select_query <- paste0("SELECT treatment_accession, amount_unit, amount_value, 
                                  comments, duration_unit, duration_value, name, temperature_unit, 
                                  temperature_value, workspace_id FROM madi_dat.treatment 
-                                 WHERE workspace_id IN (6101,6102,6103,6104,6105) 
-                                 AND treatment_accession = '", treatment_selected_row(),"';")
+                                 WHERE workspace_id = $1 
+                                 AND treatment_accession = $2;")
   print(tr_edit_select_query)
-  SQL_df <- DBI::dbGetQuery(conn, tr_edit_select_query)
+  SQL_df <- DBI::dbGetQuery(conn, tr_edit_select_query, params = list(user_workspace, treatment_selected_row()))
   
   #   tr_select_query<-paste0("SELECT treatment_accession, amount_unit, amount_value, comments,
   #                                duration_unit, duration_value, name, temperature_unit, temperature_value, workspace_id
-  # 	FROM madi_dat.treatment WHERE workspace_id IN (6101,6102,6103,6104,6105);")
+  # 	FROM madi_dat.treatment WHERE workspace_id = $1;")
   #   
   #   SQL_df <- update_db(operation = "select", table_name = "treatment", select_where = list("treatment_accession" = treatment_selected_row()))
   print(paste("The selected treatment accession is", treatment_selected_row()))
@@ -224,11 +256,15 @@ observeEvent(input$submit_edit_tr, priority = 20, {
   
   update_db(operation = "update", table_name = "treatment", db_data = updated_data, update_where = c("treatment_accession" = treatment_selected_row()))
   
-  tr_select_query<-paste0("SELECT treatment_accession, amount_unit, amount_value, comments,
-                               duration_unit, duration_value, name, temperature_unit, temperature_value, workspace_id
-	FROM madi_dat.treatment WHERE workspace_id IN (6101,6102,6103,6104,6105);")
-  
-  treatment(DBI::dbGetQuery(conn, tr_select_query))
+  # Get user's workspace ID from session data and refresh the treatment data
+  user_workspace <- session$userData$user_workspace_id
+  if (!is.null(user_workspace)) {
+    tr_select_query <- paste0("SELECT treatment_accession, amount_unit, amount_value, comments,
+                                 duration_unit, duration_value, name, temperature_unit, temperature_value, workspace_id
+      FROM madi_dat.treatment WHERE workspace_id = $1;")
+    
+    treatment(DBI::dbGetQuery(conn, tr_select_query, params = list(user_workspace)))
+  }
   
   removeModal()
 })
