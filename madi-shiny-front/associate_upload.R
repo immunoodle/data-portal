@@ -8,7 +8,7 @@ observe({
     tagList(
       selectInput("addAssociated_selectStudy",
                   "Select Existing Study Accession",
-                  choices = c("Click here", unique(madi_study_list$study_accession)), selected = NULL, multiple = FALSE)
+                  choices = c("Click here", unique(all_study_list$study_accession)), selected = NULL, multiple = FALSE)
       , conditionalPanel(
         condition = "input.addAssociated_selectStudy != 'Click here'"
         ,fileInput("upload_associated",

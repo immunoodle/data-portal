@@ -11,7 +11,7 @@ output$select_user_str_display <- renderText({
 
   # Check if user is authenticated and get user ID
   if (!isTRUE(session$userData$app_logic_initialized)) {
-    current_user_id <- "mscotzens" # Default for testing/local dev
+    current_user_id <- "dev_user_local" # Default for testing/local dev
   } else if (isTRUE(session$userData$app_logic_initialized)) {
     # Get user ID from authenticated user data
     ud <- user_data()
@@ -52,12 +52,55 @@ auto_register_user <- function(email, name, compressed_id) {
   param_oauth_id <- safe_param(compressed_id)
   param_display_name <- safe_param(name %||% username)
   param_created_by <- safe_param("system_auto_register")
-  param_project <- safe_param("NEW_USER_SANDBOX")  # Updated project name
+  param_project <- safe_param("USER_WORKSPACE")  # Updated project name
   
   print(paste0("DEBUG: Parameters prepared - Username: ", param_username, ", Email: ", param_email))
-  print(paste0("DEBUG: Assigning default workspace 6100 (New User Sandbox)"))
+  print(paste0("DEBUG: Creating new workspace for user"))
   
-  # Enhanced insert query with default workspace assignment
+  # First, create a new workspace for the user in the existing madi_dat.workspace table
+  # Create unique workspace name with timestamp
+  current_time <- format(Sys.time(), "%Y%m%d_%H%M")
+  workspace_name <- paste0(param_username, "_workspace_", current_time)
+  workspace_insert_query <- "
+    INSERT INTO madi_dat.workspace (name, category, type)
+    VALUES ($1, $2, $3)
+    RETURNING workspace_id;"
+  
+  new_workspace_result <- tryCatch({
+    DBI::dbGetQuery(conn, workspace_insert_query, params = list(
+      workspace_name,
+      "Project",   # Using "Project" as category for user workspaces
+      "PW"         # Using "PW" as type (seems to be the standard type)
+    ))
+  }, error = function(e) {
+    warning(paste("Failed to create workspace for new user:", e$message))
+    return(NULL)
+  })
+  
+  if (is.null(new_workspace_result) || nrow(new_workspace_result) == 0) {
+    warning("Failed to create workspace, using fallback")
+    new_workspace_id <- NA
+  } else {
+    new_workspace_id <- new_workspace_result$workspace_id[1]
+    print(paste0("DEBUG: Created workspace ID: ", new_workspace_id))
+    
+    # Grant the user owner access to their new workspace
+    access_insert_query <- "
+      INSERT INTO madi_track.workspace_access (workspace_id, user_email, role)
+      VALUES ($1, $2, 'owner');"
+    
+    tryCatch({
+      DBI::dbExecute(conn, access_insert_query, params = list(
+        new_workspace_id,
+        param_email
+      ))
+      print(paste0("DEBUG: Granted owner access to workspace ", new_workspace_id))
+    }, error = function(e) {
+      warning(paste("Failed to grant workspace access:", e$message))
+    })
+  }
+  
+  # Enhanced insert query with new workspace assignment
   insert_query <- "
     INSERT INTO madi_track.users (
       username, full_name, email, oauth_unique_id, display_name, 
@@ -81,7 +124,7 @@ auto_register_user <- function(email, name, compressed_id) {
       TRUE,                        # $6 - is_active (TRUE by default for new users)
       param_created_by,            # $7
       param_project,               # $8
-      6100                         # $9 - default workspace_id (New User Sandbox)
+      new_workspace_id             # $9 - newly created workspace_id
     ))
   }, error = function(e) {
     warning(paste("Failed to auto-register user:", e$message))
@@ -93,7 +136,7 @@ auto_register_user <- function(email, name, compressed_id) {
     print(paste0("  Display name: '", param_display_name, "'"))
     print(paste0("  Created by: '", param_created_by, "'"))
     print(paste0("  Project: '", param_project, "'"))
-    print(paste0("  Workspace ID: 6100 (New User Sandbox)"))
+    print(paste0("  Workspace ID: ", new_workspace_id, " (New User Workspace)"))
     
     # Return a more detailed error response
     data.frame(
@@ -123,7 +166,7 @@ observe({
     # 1. Determine Current User ID and Login Prefix
     if (is_local_dev()) {
       # Local development mode
-      current_user_id <- "mscotzens" # Use hardcoded user for local dev
+      current_user_id <- "dev_user_local" # Use hardcoded user for local dev
       current_login_prefix <- "Local Dev as "
     } else {
       # Production mode with Dex OIDC
@@ -175,7 +218,7 @@ observe({
       
       if (!is.na(registration_result$users_id)) {
         print(paste0("DEBUG: User auto-registered with ID: ", registration_result$users_id))
-        print(paste0("DEBUG: User granted immediate access to sandbox workspace"))
+        print(paste0("DEBUG: User granted immediate access to their workspace"))
         
         # Re-query to get the newly registered user
         found_user_data <- tryCatch({
@@ -190,13 +233,75 @@ observe({
         user_access_status <- "registration_failed"
       }
     } else {
-      # User found - check if they're active
+      # User found - check if they're active and have a workspace
       is_active_value <- found_user_data$is_active[1]
       print(paste0("DEBUG: User found in database. is_active value: ", is_active_value, " (type: ", typeof(is_active_value), ")"))
       
       if (isTRUE(is_active_value)) {
         user_access_status <- "active"
         print("DEBUG: User is ACTIVE - will grant full access")
+        
+        # Check if user has a workspace assigned, if not create one
+        user_workspace_id <- found_user_data$workspace_id[1]
+        if (is.null(user_workspace_id) || is.na(user_workspace_id)) {
+          print("DEBUG: User has no workspace, creating one...")
+          
+          # Extract username from email for workspace creation
+          username <- strsplit(current_user_id, "@")[[1]][1]
+          current_time <- format(Sys.time(), "%Y%m%d_%H%M")
+          workspace_name <- paste0(username, "_workspace_", current_time)
+          
+          # Create workspace
+          workspace_insert_query <- "
+            INSERT INTO madi_dat.workspace (name, category, type)
+            VALUES ($1, $2, $3)
+            RETURNING workspace_id;"
+          
+          new_workspace_result <- tryCatch({
+            DBI::dbGetQuery(conn, workspace_insert_query, params = list(
+              workspace_name,
+              "Project",   # Using "Project" as category
+              "PW"         # Standard type
+            ))
+          }, error = function(e) {
+            warning(paste("Failed to create workspace for existing user:", e$message))
+            return(NULL)
+          })
+          
+          if (!is.null(new_workspace_result) && nrow(new_workspace_result) > 0) {
+            new_workspace_id <- new_workspace_result$workspace_id[1]
+            print(paste0("DEBUG: Created workspace ID: ", new_workspace_id, " for existing user"))
+            
+            # Update user's workspace_id
+            update_user_query <- "UPDATE madi_track.users SET workspace_id = $1 WHERE oauth_unique_id = $2"
+            tryCatch({
+              DBI::dbExecute(conn, update_user_query, params = list(new_workspace_id, current_user_compress))
+              print("DEBUG: Updated user's workspace_id")
+            }, error = function(e) {
+              warning(paste("Failed to update user workspace:", e$message))
+            })
+            
+            # Grant owner access
+            access_insert_query <- "
+              INSERT INTO madi_track.workspace_access (workspace_id, user_email, role)
+              VALUES ($1, $2, 'owner');"
+            
+            tryCatch({
+              DBI::dbExecute(conn, access_insert_query, params = list(new_workspace_id, current_user_id))
+              print(paste0("DEBUG: Granted owner access to workspace ", new_workspace_id))
+              
+              # Re-query user data to get updated workspace info
+              found_user_data <- tryCatch({
+                DBI::dbGetQuery(conn, sql_query, params = list(current_user_compress))
+              }, error = function(e) {
+                warning(paste("Failed to re-query after workspace assignment:", e$message))
+                found_user_data  # Return original data
+              })
+            }, error = function(e) {
+              warning(paste("Failed to grant workspace access:", e$message))
+            })
+          }
+        }
       } else {
         user_access_status <- "inactive"
         print("DEBUG: User is INACTIVE - will deny access")
@@ -218,45 +323,47 @@ observe({
       
       user_info <- found_user_data[1, ]
 
-      # Check workspace assignment and type
+      # Check workspace assignment
       has_workspace <- !is.null(user_info$workspace_id) && !is.na(user_info$workspace_id)
-      is_sandbox_user <- has_workspace && user_info$workspace_id == 6100
       
-      print(paste0("DEBUG: User workspace info - ID: ", user_info$workspace_id, ", is_sandbox: ", is_sandbox_user, ", has_workspace: ", has_workspace))
+      print(paste0("DEBUG: User workspace info - ID: ", user_info$workspace_id, ", has_workspace: ", has_workspace))
       
-      # Determine workspace display info with better color contrast
+      # Get workspace information from the new workspace system
       workspace_info <- if (has_workspace) {
-        if (is_sandbox_user) {
+        # Query actual workspace details from madi_dat.workspace
+        workspace_query <- "
+          SELECT w.name as workspace_name, w.category, COALESCE(wa.role, 'member') as role
+          FROM madi_dat.workspace w
+          LEFT JOIN madi_track.workspace_access wa ON w.workspace_id = wa.workspace_id AND wa.user_email = $2
+          WHERE w.workspace_id = $1"
+        
+        workspace_result <- tryCatch({
+          DBI::dbGetQuery(conn, workspace_query, params = list(user_info$workspace_id, current_user_id))
+        }, error = function(e) {
+          warning(paste("Failed to query workspace details:", e$message))
+          data.frame(workspace_name = "Unknown Workspace", category = "", role = "member")
+        })
+        
+        if (nrow(workspace_result) > 0) {
           list(
-            name = "New User Sandbox",
-            description = "Your personal workspace to explore and add data",
+            name = workspace_result$workspace_name[1],
+            description = paste("Category:", workspace_result$category[1] %||% "Project"),
             color = "#0c5460",           # Darker blue for better contrast
             bg_color = "#e1f5f9",        # Lighter background
             icon = "🚀",
-            message = "Welcome! You're in your sandbox workspace where you can explore and add data.",
-            type = "sandbox"
+            message = paste("Welcome to", workspace_result$workspace_name[1]),
+            type = workspace_result$role[1] %||% "member"
           )
         } else {
-          # Handle different MADI workspace IDs
-          workspace_name <- switch(
-            as.character(user_info$workspace_id),
-            "6101" = "MADI Workspace 6101",
-            "6102" = "MADI Workspace 6102", 
-            "6103" = "MADI Workspace 6103",
-            "6104" = "MADI Workspace 6104",
-            "6105" = "MADI Workspace 6105",
-            "6106" = "MADI Workspace 6106",
-            paste("MADI Workspace", user_info$workspace_id)  # Fallback
-          )
-          
+          # Fallback for workspace not found in new system
           list(
-            name = workspace_name,
-            description = "Full access to project data",
+            name = paste("Workspace", user_info$workspace_id),
+            description = "Workspace details unavailable",
             color = "#0d5016",           # Darker green for better contrast
             bg_color = "#e8f5e8",        # Lighter background
-            icon = "✅",
-            message = paste("You have access to", workspace_name),
-            type = "project"
+            icon = "📁",
+            message = paste("You have access to workspace", user_info$workspace_id),
+            type = "member"
           )
         }
       } else {
@@ -291,6 +398,68 @@ observe({
 
       # Render Primary Sidebar Panel with improved colors and contrast
       output$primarysidepanel <- renderUI({
+        # Add reactive dependencies for workspace changes
+        workspace_list_trigger()
+        studies_trigger()
+        current_workspace()  # React to workspace changes
+        
+        # Get current workspace info - make this reactive to workspace changes
+        current_workspace_id <- current_workspace()
+        user_info <- userData_upload()
+        
+        # Recalculate workspace info when workspace changes
+        workspace_info <- if (!is.null(current_workspace_id) && !is.na(current_workspace_id)) {
+          # Query actual workspace details from madi_dat.workspace
+          workspace_query <- "
+            SELECT w.name as workspace_name, w.category, COALESCE(wa.role, 'member') as role
+            FROM madi_dat.workspace w
+            LEFT JOIN madi_track.workspace_access wa ON w.workspace_id = wa.workspace_id AND wa.user_email = $2
+            WHERE w.workspace_id = $1"
+          
+          workspace_result <- tryCatch({
+            DBI::dbGetQuery(conn, workspace_query, params = list(current_workspace_id, current_user_id))
+          }, error = function(e) {
+            warning(paste("Failed to query workspace details:", e$message))
+            data.frame(workspace_name = "Unknown Workspace", category = "", role = "member")
+          })
+          
+          if (nrow(workspace_result) > 0) {
+            # Use role directly without sandbox concept
+            workspace_type <- workspace_result$role[1] %||% "member"
+            
+            list(
+              name = workspace_result$workspace_name[1],
+              description = paste("Category:", workspace_result$category[1] %||% "Project"),
+              color = "#0c5460",           # Darker blue for better contrast
+              bg_color = "#e1f5f9",        # Lighter background
+              icon = "🚀",
+              message = paste("Welcome to", workspace_result$workspace_name[1]),
+              type = workspace_type
+            )
+          } else {
+            # Fallback for workspace not found in new system
+            list(
+              name = paste("Workspace", current_workspace_id),
+              description = "Workspace details unavailable",
+              color = "#0d5016",           # Darker green for better contrast
+              bg_color = "#e8f5e8",        # Lighter background
+              icon = "📁",
+              message = paste("You have access to workspace", current_workspace_id),
+              type = "member"
+            )
+          }
+        } else {
+          list(
+            name = "No Workspace",
+            description = "Contact administrator",
+            color = "#721c24",             # Darker red for better contrast
+            bg_color = "#fdeaea",          # Lighter background
+            icon = "⚠️",
+            message = "No workspace assigned",
+            type = "none"
+          )
+        }
+        
         div(
           style = "padding: 15px; max-width: 100%; overflow-x: hidden;",
           
@@ -327,29 +496,24 @@ observe({
             p(paste("Welcome,", display_name), style = paste0("color: ", workspace_info$color, "; margin: 5px 0; font-size: 1.1em; font-weight: 600;")),
             
             # Workspace-specific messaging with better contrast
-            if (workspace_info$type == "sandbox") {
-              div(
-                style = "background-color: #ffffff; padding: 12px; border-radius: 6px; margin: 10px 0; border: 1px solid #0c5460;",
-                p("🎯 You're in your sandbox workspace!", style = "color: #0c5460; margin: 0; font-weight: 600; font-size: 0.95em;"),
-                p("Start by adding your own studies and data. Contact admin to join a specific project workspace.", style = "color: #0c5460; margin: 5px 0 0 0; font-size: 0.9em;")
-              )
-            } else if (workspace_info$type == "none") {
+            if (workspace_info$type == "none") {
               div(
                 style = "background-color: #ffffff; padding: 12px; border-radius: 6px; margin: 10px 0; border: 1px solid #721c24;",
                 p("⚠️ No workspace assigned!", style = "color: #721c24; margin: 0; font-weight: 600; font-size: 0.95em;"),
                 p("Contact administrator to assign a workspace for data access.", style = "color: #721c24; margin: 5px 0 0 0; font-size: 0.9em;")
+              )
+            } else {
+              div(
+                style = "background-color: #ffffff; padding: 12px; border-radius: 6px; margin: 10px 0; border: 1px solid #0c5460;",
+                p("🎯 You're in your workspace!", style = "color: #0c5460; margin: 0; font-weight: 600; font-size: 0.95em;"),
+                p("Start by adding your studies and data to this workspace.", style = "color: #0c5460; margin: 5px 0 0 0; font-size: 0.9em;")
               )
             },
             
             div(
               style = "margin-top: 10px; padding-top: 10px; border-top: 1px solid rgba(0,0,0,0.2);",
               div(
-                style = "display: flex; justify-content: space-between; margin-bottom: 5px;",
-                span("Project:", style = paste0("color: ", workspace_info$color, "; font-size: 0.9em; font-weight: 600;")),
-                span(user_info$project %||% "None", style = paste0("color: ", workspace_info$color, "; font-size: 0.9em; font-weight: 500;"))
-              ),
-              div(
-                style = "display: flex; justify-content: space-between;",
+                style = "display: flex; justify-content: space-between; align-items: center;",
                 span("Workspace:", style = paste0("color: ", workspace_info$color, "; font-size: 0.9em; font-weight: 600;")),
                 span(workspace_info$name, style = paste0("color: ", workspace_info$color, "; font-size: 0.9em; font-weight: 500;"))
               )
@@ -372,13 +536,18 @@ observe({
                              choiceNames = list(
                                div(
                                  style = "display: flex; align-items: center; padding: 8px; background-color: #ffffff;",
-                                 tags$i(class = "fa fa-search", style = "color: #e74c3c; margin-right: 10px; font-size: 1.1em;"),
-                                 span("Explore Existing Data", style = "color: #2c3e50; font-weight: 600;")
+                                 tags$i(class = "fa fa-plus-circle", style = "color: #e74c3c; margin-right: 10px; font-size: 1.1em;"),
+                                 span("Add New Data", style = "color: #2c3e50; font-weight: 600;")
                                ),
                                div(
                                  style = "display: flex; align-items: center; padding: 8px; background-color: #ffffff;",
-                                 tags$i(class = "fa fa-plus-circle", style = "color: #e74c3c; margin-right: 10px; font-size: 1.1em;"),
-                                 span("Add New Data", style = "color: #2c3e50; font-weight: 600;")
+                                 tags$i(class = "fa fa-eye", style = "color: #e74c3c; margin-right: 10px; font-size: 1.1em;"),
+                                 span("View Study", style = "color: #2c3e50; font-weight: 600;")
+                               ),
+                               div(
+                                 style = "display: flex; align-items: center; padding: 8px; background-color: #ffffff;",
+                                 tags$i(class = "fa fa-users", style = "color: #e74c3c; margin-right: 10px; font-size: 1.1em;"),
+                                 span("Manage Workspaces", style = "color: #2c3e50; font-weight: 600;")
                                ),
                                div(
                                  style = "display: flex; align-items: center; padding: 8px; background-color: #ffffff;",
@@ -386,8 +555,8 @@ observe({
                                  span("Upload to Immport", style = "color: #2c3e50; font-weight: 600;")
                                )
                              ),
-                             choiceValues = list("exploreData", "addData", "immportUpload"),
-                             selected = "exploreData"
+                             choiceValues = list("addData", "viewStudy", "manageWorkspaces", "immportUpload"),
+                             selected = "addData"
                 )
               } else {
                 div(
@@ -403,75 +572,14 @@ observe({
           if (workspace_info$type != "none") {
             tagList(
               conditionalPanel(
-                condition = "input.rb == 'exploreData'",
-                div(
-                  style = "background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #3498db;",
-                  h6("📊 Data Exploration", style = "color: #2980b9; margin-bottom: 10px; font-weight: 600;"),
-                  if (workspace_info$type == "sandbox") {
-                    div(
-                      p("🎯 Exploring your workspace data", style = "color: #2980b9; font-size: 0.9em; margin-bottom: 10px; font-weight: 500;"),
-                      p("Add some studies first, then they'll appear here for exploration!", style = "color: #2980b9; font-size: 0.9em; margin-bottom: 10px;"),
-                      # Use safe fallback for study choices in sandbox
-                      tryCatch({
-                        # Get studies for this user's workspace
-                        user_studies <- DBI::dbGetQuery(conn, 
-                          "SELECT DISTINCT madi_program FROM madi_dat.study WHERE workspace_id = $1", 
-                          params = list(user_info$workspace_id))
-                        
-                        if (nrow(user_studies) > 0) {
-                          div(
-                            style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;",
-                            tags$style(HTML("
-                              #madi_studies .checkbox label {
-                                color: #2c3e50 !important;
-                                font-weight: 500 !important;
-                                font-size: 0.95em !important;
-                              }
-                            ")),
-                            checkboxGroupInput("madi_studies", 
-                                              tags$span("Your Studies:", style = "color: #2980b9; font-weight: 600;"), 
-                                              choices = user_studies$madi_program, 
-                                              selected = user_studies$madi_program[1])
-                          )
-                        } else {
-                          p("No studies found. Add some data using 'Add New Data' option!", 
-                            style = "color: #2980b9; font-style: italic; font-weight: 500;")
-                        }
-                      }, error = function(e) {
-                        p("Click 'Add New Data' to create your first study!", 
-                          style = "color: #2980b9; font-style: italic; font-weight: 500;")
-                      })
-                    )
-                  } else {
-                    div(
-                      style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;",
-                      tags$style(HTML("
-                        #madi_studies .checkbox label {
-                          color: #2c3e50 !important;
-                          font-weight: 500 !important;
-                          font-size: 0.95em !important;
-                        }
-                      ")),
-                      checkboxGroupInput("madi_studies", 
-                                        tags$span("Select MADI Studies:", style = "color: #2980b9; font-weight: 600;"), 
-                                        choices = unique(study$madi_program), 
-                                        selected = "MADI")
-                    )
-                  }
-                )
-              ),
-              
-              conditionalPanel(
                 condition = "input.rb == 'addData'",
                 div(
                   style = "background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #f39c12;",
                   h6("➕ Add New Data", style = "color: #d68910; margin-bottom: 10px; font-weight: 600;"),
-                  if (workspace_info$type == "sandbox") {
-                    div(
-                      p("🎯 Add your own data to your workspace", style = "color: #d68910; font-size: 0.9em; margin-bottom: 10px; font-weight: 500;"),
-                      p("Start by creating a new study!", style = "color: #d68910; font-size: 0.9em; font-weight: 600; margin-bottom: 10px;")
-                    )
-                  },
+                  div(
+                    p("🎯 Add your data to your workspace", style = "color: #d68910; font-size: 0.9em; margin-bottom: 10px; font-weight: 500;"),
+                    p("Start by creating a new study!", style = "color: #d68910; font-size: 0.9em; font-weight: 600; margin-bottom: 10px;")
+                  ),
                   # Enhanced radio buttons with proper text styling
                   div(
                     style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;",
@@ -497,72 +605,19 @@ observe({
               ),
               
               conditionalPanel(
-                condition = "input.rb == 'adminTasks'",
-                div(
-                  style = "background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #e74c3c;",
-                  h6("🔧 Administration", style = "color: #c0392b; margin-bottom: 10px; font-weight: 600;"),
-                  if (workspace_info$type == "sandbox") {
-                    p("Admin functions available in project workspaces only", style = "color: #c0392b; font-size: 0.9em; font-weight: 500;")
-                  } else {
-                    div(
-                      style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #dee2e6;",
-                      tags$style(HTML("
-                        #rb_admin .radio label {
-                          color: #2c3e50 !important;
-                          font-weight: 500 !important;
-                          font-size: 0.95em !important;
-                        }
-                      ")),
-                      radioButtons("rb_admin", 
-                                  tags$span("Admin functions:", style = "color: #c0392b; font-weight: 600;"),
-                                  choiceNames = list(
-                                    tags$span("Add users", style = "color: #2c3e50; font-weight: 500;"),
-                                    tags$span("Add new program", style = "color: #2c3e50; font-weight: 500;"),
-                                    tags$span("Add new personnel", style = "color: #2c3e50; font-weight: 500;"),
-                                    tags$span("Add program 2 personnel", style = "color: #2c3e50; font-weight: 500;"),
-                                    tags$span("Add workspace", style = "color: #2c3e50; font-weight: 500;")
-                                  ),
-                                  choiceValues = list("add_users", "add_program", "add_personnel", "add_program_2_personnel", "add_workspace"),
-                                  selected = character(0)
-                      )
-                    )
-                  }
-                )
-              ),
-              
-              conditionalPanel(
                 condition = "input.rb == 'immportUpload'",
                 div(
                   style = "background-color: #ffffff; padding: 15px; border-radius: 8px; border: 2px solid #16a085;",
                   h6("☁️ Immport Upload", style = "color: #138d75; margin-bottom: 10px; font-weight: 600;"),
-                  if (workspace_info$type == "sandbox") {
-                    div(
-                      p("🎯 Upload your data to Immport", style = "color: #138d75; font-size: 0.9em; margin-bottom: 10px; font-weight: 500;"),
-                      p("Upload data from your workspace to the Immport system", style = "color: #138d75; font-size: 0.9em; margin-bottom: 10px;")
-                    )
-                  } else {
-                    p("Upload data to Immport system.", style = "color: #138d75; margin-bottom: 10px; font-weight: 500;")
-                  },
+                  div(
+                    p("🎯 Upload your data to Immport", style = "color: #138d75; font-size: 0.9em; margin-bottom: 10px; font-weight: 500;"),
+                    p("Upload data from your workspace to the Immport system", style = "color: #138d75; font-size: 0.9em; margin-bottom: 10px;")
+                  ),
                   div(
                     style = "background-color: #f8f9fa; padding: 10px; border-radius: 5px; border: 1px solid #16a085;",
                     p("Select your data files and configure upload settings.", style = "color: #138d75; margin: 0; font-size: 0.9em; font-weight: 500;")
                   )
                 )
-              )
-            )
-          },
-          
-          # Add workspace upgrade option for sandbox users with better colors
-          if (workspace_info$type == "sandbox") {
-            div(
-              style = "background-color: #f4f6f7; padding: 15px; border-radius: 8px; border: 2px solid #7f8c8d; margin-top: 20px;",
-              h6("🚀 Ready for a Project Workspace?", style = "color: #2c3e50; margin-bottom: 10px; font-weight: 600;"),
-              p("Contact your administrator to join a specific MADI project workspace for full data access.", style = "color: #2c3e50; margin-bottom: 10px; font-weight: 500;"),
-              div(
-                style = "background-color: #ffffff; padding: 10px; border-radius: 5px; font-family: monospace; border: 1px solid #bdc3c7;",
-                p(paste("Your User ID:", user_info$users_id), style = "color: #2c3e50; margin: 2px 0; font-size: 0.9em; font-weight: 500;"),
-                p(paste("Email:", current_user_id), style = "color: #2c3e50; margin: 2px 0; font-size: 0.9em; font-weight: 500;"),
-                p("Available workspaces: 6101-6106", style = "color: #2c3e50; margin: 2px 0; font-size: 0.9em; font-weight: 500;")
               )
             )
           }
@@ -611,6 +666,11 @@ observe({
       # Render Primary Sidebar Panel (showing access denied message)
       # This is what non-active users see - NO APPLICATION FUNCTIONALITY
       output$primarysidepanel <- renderUI({
+        # Add reactive dependencies for workspace changes
+        workspace_list_trigger()
+        studies_trigger()
+        current_workspace()  # React to workspace changes
+        
         div(
           style = "padding: 15px; max-width: 100%; overflow-x: hidden;",
           
@@ -699,8 +759,6 @@ observe({
                     span(found_user_data$users_id[1], style = "color: #28a745;"),
                     span("✅ Active:", style = "font-weight: 600; color: #495057;"),
                     span(as.character(found_user_data$is_active[1]), style = if(found_user_data$is_active[1]) "color: #28a745; font-weight: 600;" else "color: #dc3545; font-weight: 600;"),
-                    span("📁 Project:", style = "font-weight: 600; color: #495057;"),
-                    span(found_user_data$project[1] %||% "None", style = "color: #6c757d;"),
                     span("🏢 Workspace:", style = "font-weight: 600; color: #495057;"),
                     span(found_user_data$workspace_id[1] %||% "None", style = "color: #6c757d;")
                   )
@@ -750,7 +808,6 @@ observe({
                                                    tagList(
                                                      tags$pre(paste("Database User ID:", found_user_data$users_id[1])),
                                                      tags$pre(paste("Is Active:", found_user_data$is_active[1])),
-                                                     tags$pre(paste("Project:", found_user_data$project[1] %||% "None")),
                                                      tags$pre(paste("Workspace ID:", found_user_data$workspace_id[1] %||% "None")),
                                                      tags$pre(paste("Username:", found_user_data$username[1] %||% "None"))
                                                    )
@@ -766,10 +823,11 @@ observe({
                                                ),
                                                tags$div(
                                                  style = "background-color: #d1ecf1; padding: 15px; border-radius: 5px; margin-bottom: 10px;",
-                                                 h6("🏢 To ASSIGN WORKSPACE (important for data access):", style = "color: #0c5460;"),
-                                                 tags$code(paste0("UPDATE madi_track.users SET workspace_id = 6101 WHERE oauth_unique_id = '", current_user_compress, "';"),
-                                                           style = "background-color: #f8f9fa; padding: 5px; border-radius: 3px; display: block; margin: 5px 0;"),
-                                                 p("Available workspace IDs: 6101, 6102, 6103, 6104, 6105, 6106", style = "color: #0c5460; font-size: 0.9em; margin: 5px 0;")
+                                                 h6("🏢 To ASSIGN WORKSPACE ACCESS (use workspace management system):", style = "color: #0c5460;"),
+                                                 p("Use the 'Workspace Access' tab in the application to manage workspace permissions.", style = "color: #0c5460; font-size: 0.9em; margin: 5px 0;"),
+                                                 tags$code("Or grant access directly:", style = "background-color: #f8f9fa; padding: 5px; border-radius: 3px; display: block; margin: 5px 0;"),
+                                                 tags$code(paste0("INSERT INTO madi_track.workspace_access (workspace_id, user_email, role, granted_by, granted_at) VALUES (workspace_id, '", current_user_id, "', 'member', 'admin', CURRENT_TIMESTAMP);"),
+                                                           style = "background-color: #f8f9fa; padding: 5px; border-radius: 3px; display: block; margin: 5px 0; font-size: 0.8em;")
                                                ),
                                                tags$div(
                                                  style = "background-color: #f8d7da; padding: 15px; border-radius: 5px; margin-bottom: 10px;",
@@ -802,6 +860,11 @@ observe({
     
     # Render error message in sidebar
     output$primarysidepanel <- renderUI({
+      # Add reactive dependencies for workspace changes
+      workspace_list_trigger()
+      studies_trigger()
+      current_workspace()  # React to workspace changes
+      
       mainPanel(
         div(
           style = "background-color: #f8d7da; padding: 20px; border-radius: 5px; border-left: 4px solid #dc3545;",
@@ -815,3 +878,5 @@ observe({
     })
   })
 })
+
+

@@ -5811,7 +5811,7 @@ def _get_db_connection():
     # Check if all necessary environment variables are loaded
     missing_vars = []
     if not db_user: missing_vars.append("DB_USER")
-    if not db_password: missing_vars.append("DB_PASSWORD") # Be careful logging actual password values
+    if db_password is None: missing_vars.append("DB_PASSWORD") # Allow empty string for local dev (no password)
     if not db_host: missing_vars.append("DB_HOST")
     if not db_port: missing_vars.append("DB_PORT")
     if not db_name: missing_vars.append("DB_NAME")

@@ -121,7 +121,14 @@ entry_form_itv <- function(button_id_itv){
                 #                                       	  INNER JOIN madi_dat.study
                 #                                           ON study.study_accession = intervention.study_accession;")),
                 textInput("subject_accession", labelMandatory("Subject Accession"), placeholder = ""),
-                selectInput("workspace_id", labelMandatory("workspace_id"), selected=NULL, choices = DBI::dbGetQuery(conn, "SELECT workspace_id FROM madi_dat.workspace WHERE workspace_id IN (6101,6102,6103,6104,6105);"))
+                selectInput("workspace_id", labelMandatory("workspace_id"), selected=NULL, choices = {
+                  user_workspace <- session$userData$user_workspace_id
+                  if (!is.null(user_workspace)) {
+                    DBI::dbGetQuery(conn, "SELECT workspace_id FROM madi_dat.workspace WHERE workspace_id = $1;", params = list(user_workspace))
+                  } else {
+                    character(0)
+                  }
+                })
               ),
               
               

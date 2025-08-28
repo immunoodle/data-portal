@@ -5,7 +5,32 @@ source("helpers.R", local=TRUE) # references functions found in the helpers.R fi
 #### filtering of the studies
 filter_mod <- datamods::select_group_server(
     id = "studyfilters",
-    data_r = study,
+    data_r = reactive({
+      # Add reactive dependency to refresh when studies change
+      studies_trigger()
+      
+      if (nrow(study) == 0) {
+        # Return a data frame with the expected structure but no rows
+        return(data.frame(
+          madi_program = character(0),
+          research_focus = character(0),
+          condition_preferred = character(0),
+          type = character(0),
+          measurement_technique = character(0),
+          species = character(0),
+          sex = character(0),
+          clinical_trial = character(0),
+          have_assessment = character(0),
+          have_test = character(0),
+          actual_enrollment = numeric(0),
+          sponsoring_organization = character(0),
+          study_accession = character(0),
+          tree_id = character(0),
+          stringsAsFactors = FALSE
+        ))
+      }
+      return(study)
+    }),
     vars_r = c("madi_program", "research_focus", "condition_preferred", "type", "measurement_technique", "species", "sex", "clinical_trial", "have_assessment", "have_test", "actual_enrollment", "sponsoring_organization", "study_accession", "tree_id")
   )
 
@@ -15,18 +40,61 @@ rv_study_selected <- reactiveValues(study_accession = NA,
 
 #### showing the all studies table with applied filters
 output$studiestab2 <- DT::renderDataTable({
+  # Add reactive dependency to refresh when studies change
+  studies_trigger()
+  
   # input$reset
-  full_row <- filter_mod() %>%
-    dplyr::filter(madi_program %in% input$madi_studies)
-  unq_row <- full_row %>%
-    dplyr::select(study_accession, sponsoring_organization, brief_title, research_focus, clinical_trial, tree_id) %>%
-    distinct(study_accession, .keep_all = TRUE)
+  tryCatch({
+    full_row <- filter_mod()
+    
+    # Check if we have any data to filter
+    if (nrow(full_row) == 0) {
+      return(data.frame(
+        study_accession = character(0),
+        sponsoring_organization = character(0),
+        brief_title = character(0),
+        research_focus = character(0),
+        clinical_trial = character(0),
+        tree_id = character(0),
+        stringsAsFactors = FALSE
+      ))
+    }
+    
+    # Apply workspace study filter if it exists and has values
+    if (!is.null(input$workspace_studies) && length(input$workspace_studies) > 0) {
+      # If "All Studies" is selected, don't filter
+      if (!"All Studies" %in% input$workspace_studies) {
+        full_row <- full_row %>%
+          dplyr::filter(study_accession %in% input$workspace_studies)
+      }
+    }
+    
+    unq_row <- full_row %>%
+      dplyr::select(study_accession, sponsoring_organization, brief_title, research_focus, clinical_trial, tree_id) %>%
+      distinct(study_accession, .keep_all = TRUE)
 
-  # Updating the rv_study_selected reactiveVal
-  rv_study_selected$study_accession <- unq_row$study_accession
-  rv_study_selected$brief_title <- unq_row$brief_title
+    # Updating the rv_study_selected reactiveVal only if we have data
+    if (nrow(unq_row) > 0) {
+      rv_study_selected$study_accession <- unq_row$study_accession
+      rv_study_selected$brief_title <- unq_row$brief_title
+    } else {
+      rv_study_selected$study_accession <- character(0)
+      rv_study_selected$brief_title <- character(0)
+    }
 
-  unq_row
+    return(unq_row)
+  }, error = function(e) {
+    warning("Error in studiestab2 rendering: ", e$message)
+    return(data.frame(
+      study_accession = character(0),
+      sponsoring_organization = character(0),
+      brief_title = character(0),
+      research_focus = character(0),
+      clinical_trial = character(0),
+      tree_id = character(0),
+      stringsAsFactors = FALSE
+    ))
+  })
 }, selection = 'single',
 options = list(scrollX = TRUE)
 )
@@ -34,9 +102,47 @@ options = list(scrollX = TRUE)
 ## All Studies
 # filtering only unique study_accessions
 study_table_value <- reactive({
-  out <- filter_mod() %>%
-    dplyr::filter(madi_program %in% input$madi_studies) %>%
-    distinct(study_accession, .keep_all = TRUE)
+  tryCatch({
+    full_data <- filter_mod()
+    
+    # Check if we have any data
+    if (nrow(full_data) == 0) {
+      return(data.frame(
+        study_accession = character(0),
+        sponsoring_organization = character(0),
+        brief_title = character(0),
+        research_focus = character(0),
+        clinical_trial = character(0),
+        tree_id = character(0),
+        stringsAsFactors = FALSE
+      ))
+    }
+    
+    # Apply workspace study filter if it exists and has values
+    if (!is.null(input$workspace_studies) && length(input$workspace_studies) > 0) {
+      # If "All Studies" is selected, don't filter
+      if (!"All Studies" %in% input$workspace_studies) {
+        full_data <- full_data %>%
+          dplyr::filter(study_accession %in% input$workspace_studies)
+      }
+    }
+    
+    out <- full_data %>%
+      distinct(study_accession, .keep_all = TRUE)
+    
+    return(out)
+  }, error = function(e) {
+    warning("Error in study_table_value: ", e$message)
+    return(data.frame(
+      study_accession = character(0),
+      sponsoring_organization = character(0),
+      brief_title = character(0),
+      research_focus = character(0),
+      clinical_trial = character(0),
+      tree_id = character(0),
+      stringsAsFactors = FALSE
+    ))
+  })
 })
 
 study_table_module <- select_group_server(

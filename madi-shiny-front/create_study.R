@@ -1,5 +1,8 @@
 ### Create new study through an editable madi_dat.study table.
 
+# Helper functions for handling NULL/empty values
+`%||%` <- function(a, b) if (is.null(a)) b else a
+nv <- function(x) { if (is.null(x) || length(x)==0 || identical(x, "") ) NA_character_ else as.character(x)[1] }
 
 selected_study_accession <- reactiveVal()
 tab_name <- reactiveVal()
@@ -46,24 +49,21 @@ appCSS <- ".mandatory_star { color: red; }"
 newstudy <- reactive({
   input$submit_add
   input$submit_edit
-  # newstudy <- update_db(operation = "select", table_name = "study", select_where = list("workspace_id" = c(6101,6102,6103,6104,6105)))
-  combined_study_query <- paste0("SELECT study.study_accession, actual_completion_date, actual_enrollment, actual_start_date, age_unit, 
-brief_description, brief_title
-, clinical_trial, condition_studied, dcl_id, description, doi, endpoints, gender_included, hypothesis, 
-initial_data_release_date
-, initial_data_release_version, intervention_agent, latest_data_release_date, latest_data_release_version, 
-maximum_age, minimum_age
-, objectives, official_title, sponsoring_organization, target_enrollment, workspace_id
-, condition_reported, condition_preferred
-, research_focus
-	FROM madi_dat.study
-	LEFT OUTER JOIN madi_dat.study_2_condition_or_disease AS cd ON cd.study_accession = study.study_accession
-	LEFT OUTER JOIN madi_dat.study_categorization AS sc ON sc.study_accession = study.study_accession
-	WHERE workspace_id IN (6101,6102,6103,6104,6105);") 
-  
-  # WHERE workspace_id = ", userData_upload()$workspace_id,";")
-  
-  newstudy <- DBI::dbGetQuery(conn, combined_study_query)
+
+  ws <- as.integer(userData_upload()$workspace_id)
+  sql <- "
+    SELECT study.study_accession, actual_completion_date, actual_enrollment, actual_start_date, age_unit,
+           brief_description, brief_title, clinical_trial, condition_studied, dcl_id, description, doi,
+           endpoints, gender_included, hypothesis, initial_data_release_date, initial_data_release_version,
+           intervention_agent, latest_data_release_date, latest_data_release_version, maximum_age, minimum_age,
+           objectives, official_title, sponsoring_organization, target_enrollment, workspace_id,
+           condition_reported, condition_preferred, research_focus
+    FROM madi_dat.study
+    LEFT JOIN madi_dat.study_2_condition_or_disease AS cd USING (study_accession)
+    LEFT JOIN madi_dat.study_categorization AS sc USING (study_accession)
+    WHERE workspace_id = $1;
+  "
+  DBI::dbGetQuery(conn, sql, params = list(ws))
 })  
 
 observeEvent(input$newstudy_table_rows_selected, {
@@ -114,21 +114,25 @@ entry_form <- function(button_id){
               column(
                 width=4,
                 disabled(
-                  textInput("study_accession", labelMandatory("Study Accession"), value=DBI::dbGetQuery(conn,"SELECT CONCAT('SDY', MAX(CAST(SUBSTRING(study_accession,4) AS INTEGER))+1) AS next_study_accession FROM madi_dat.study;"))
+                  textInput(
+                    "study_accession", 
+                    labelMandatory("Study Accession"), 
+                    value = DBI::dbGetQuery(conn, "SELECT CONCAT('SDY', MAX(CAST(SUBSTRING(study_accession,4) AS INTEGER))+1) AS next FROM madi_dat.study;")[["next"]][1]
+                  )
                 ),
-                dateInput("actual_completion_date", "Actual Completion Date", value = NA, format = "yyyy-mm-dd"),
+                dateInput("actual_completion_date", "Actual Completion Date", value = NULL, format = "yyyy-mm-dd"),
                 numericInput("actual_enrollment", "Actual Enrollment", value = NA),
-                dateInput("actual_start_date", "Actual Start Date", value = NA, format = "yyyy-mm-dd"),
+                dateInput("actual_start_date", "Actual Start Date", value = NULL, format = "yyyy-mm-dd"),
                 selectizeInput("age_unit", "Age Unit", options = list(
                   onInitialize = I('function() { this.setValue(""); }')
-                ), selected=NULL, choices = DBI::dbGetQuery(conn, "SELECT name FROM madi_dat.lk_time_unit;")),
+                ), selected=NULL, choices = DBI::dbGetQuery(conn, "SELECT name FROM madi_dat.lk_time_unit;")[["name"]]),
                 textInput("brief_description", "Brief Description", placeholder = ""),
                 textInput("brief_title", "Brief Title", placeholder = ""),
-                textInput("clinical_trial", labelMandatory("Clinical Trial"), placeholder = ""),
+                textInput("clinical_trial", labelMandatory("Clinical Trial"), placeholder = "Type Y or N"),
                 textInput("condition_studied", "Condition Studied", placeholder = ""),
                 selectizeInput("dcl_id", labelMandatory("DCL ID"), options = list(
                   onInitialize = I('function() { this.setValue(""); }')
-                ), selected=NULL, choices = DBI::dbGetQuery(conn, "SELECT id FROM madi_dat.lk_data_completeness;"))
+                ), selected=NULL, choices = DBI::dbGetQuery(conn, "SELECT id FROM madi_dat.lk_data_completeness;")[["id"]])
               ),
               column(
                 width = 4,
@@ -137,10 +141,10 @@ entry_form <- function(button_id){
                 textInput("endpoints", "Endpoints", placeholder = ""),
                 textInput("gender_included", "Gender Included", placeholder = ""),
                 textInput("hypothesis", "Hypothesis", placeholder = ""),
-                dateInput("initial_data_release_date", "initial_data_release_date", value=NA, format = "yyyy-mm-dd"),
+                dateInput("initial_data_release_date", "initial_data_release_date", value=NULL, format = "yyyy-mm-dd"),
                 textInput("initial_data_release_version", "initial_data_release_version", placeholder = ""),
                 textInput("intervention_agent", "intervention_agent", placeholder = ""),
-                dateInput("latest_data_release_date", "latest_data_release_date", value=NA, format = "yyyy-mm-dd"),
+                dateInput("latest_data_release_date", "latest_data_release_date", value=NULL, format = "yyyy-mm-dd"),
                 textInput("latest_data_release_version", "latest_data_release_version", placeholder = "")
               ),
               column(
@@ -156,11 +160,11 @@ entry_form <- function(button_id){
                 ),
                 selectizeInput("research_focus", labelMandatory("Research Focus"), options = list(
                   onInitialize = I('function() { this.setValue(""); }')
-                ), selected=NULL, choices = DBI::dbGetQuery(conn, "SELECT name FROM madi_dat.lk_research_focus;")), 
+                ), selected=NULL, choices = DBI::dbGetQuery(conn, "SELECT name FROM madi_dat.lk_research_focus;")[["name"]]), 
                 textInput("condition_reported", labelMandatory("Condition Reported"), placeholder = ""),
                 selectizeInput("condition_preferred", "Condition Preferred", options = list(
                   onInitialize = I('function() { this.setValue(""); }')
-                ), selected=NULL, choices = DBI::dbGetQuery(conn, "SELECT name FROM madi_dat.lk_disease;"))
+                ), selected=NULL, choices = DBI::dbGetQuery(conn, "SELECT name FROM madi_dat.lk_disease;")[["name"]])
               ),
               
               title="New Study",
@@ -227,22 +231,111 @@ formData_cd <- reactive({
 #Add data
 appendData <- function(data){
   print("before add study")
-  update_db(operation = "insert", db_data = data, table_name = "study")
+  print(paste("DEBUG: appendData called with data:", class(data)))
+  
+  # Build a Postgres-style parameterized INSERT
+  sql_insert <- "
+INSERT INTO madi_dat.study (
+  study_accession, actual_completion_date, actual_enrollment, actual_start_date, age_unit,
+  brief_description, brief_title, clinical_trial, condition_studied, dcl_id, description, doi,
+  endpoints, gender_included, hypothesis, initial_data_release_date, initial_data_release_version,
+  intervention_agent, latest_data_release_date, latest_data_release_version, maximum_age,
+  minimum_age, objectives, official_title, sponsoring_organization, target_enrollment, workspace_id
+) VALUES (
+  $1, $2::date, $3::int, $4::date, $5::text,
+  $6::text, $7::text, $8::text, $9::text, $10::int, $11::text, $12::text,
+  $13::text, $14::text, $15::text, $16::date, $17::text,
+  $18::text, $19::date, $20::text, $21::text,
+  $22::text, $23::text, $24::text, $25::text, $26::int, $27::int
+);
+"
+
+  # Convert inputs to correctly-typed R values (so NULL/NA become SQL NULLs)
+  p1  <- if (isTruthy(input$study_accession)) as.character(input$study_accession) else NA_character_
+  p2  <- if (length(input$actual_completion_date)) as.Date(input$actual_completion_date) else as.Date(NA)
+  p3  <- if (isTruthy(input$actual_enrollment)) as.integer(input$actual_enrollment) else NA_integer_
+  p4  <- if (length(input$actual_start_date)) as.Date(input$actual_start_date) else as.Date(NA)
+  p5  <- if (isTruthy(input$age_unit)) as.character(input$age_unit) else NA_character_
+  p6  <- nv(input$brief_description)
+  p7  <- nv(input$brief_title)
+  p8  <- nv(toupper(substr(trimws(input$clinical_trial %||% ""), 1, 1))) # "Y"/"N"
+  p9  <- nv(input$condition_studied)
+  p10 <- if (isTruthy(input$dcl_id)) as.integer(input$dcl_id) else NA_integer_
+  p11 <- nv(input$description)
+  p12 <- nv(input$doi)
+  p13 <- nv(input$endpoints)
+  p14 <- nv(input$gender_included)
+  p15 <- nv(input$hypothesis)
+  p16 <- if (length(input$initial_data_release_date)) as.Date(input$initial_data_release_date) else as.Date(NA)
+  p17 <- nv(input$initial_data_release_version)
+  p18 <- nv(input$intervention_agent)
+  p19 <- if (length(input$latest_data_release_date)) as.Date(input$latest_data_release_date) else as.Date(NA)
+  p20 <- nv(input$latest_data_release_version)
+  p21 <- nv(as.character(input$maximum_age)) # Keep as text since DB expects varchar
+  p22 <- nv(as.character(input$minimum_age)) # Keep as text since DB expects varchar
+  p23 <- nv(input$objectives)
+  p24 <- nv(input$official_title)
+  p25 <- nv(input$sponsoring_organization)
+  p26 <- if (isTruthy(input$target_enrollment)) as.integer(input$target_enrollment) else NA_integer_
+  p27 <- as.integer(input$workspace_id)
+
+  params <- list(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23,p24,p25,p26,p27)
+
+  print("DEBUG: Parameter summary:")
+  for(i in 1:length(params)) {
+    param_val <- params[[i]]
+    print(paste("  Param", i, ":", class(param_val), "length:", length(param_val), "value:", toString(param_val)))
+  }
+
+  tryCatch({
+    result <- DBI::dbExecute(conn, sql_insert, params = params)
+    print(paste("Study inserted successfully! Rows affected:", result))
+    
+    # Only proceed with categorization and condition if study was inserted successfully
+    if(result > 0) {
+      print("Study insert successful, proceeding with categorization and condition...")
+      return(TRUE)  # Signal success
+    } else {
+      print("Study insert failed - no rows affected")
+      return(FALSE)
+    }
+  }, error = function(e) {
+    print(paste("SQL insert failed:", e$message))
+    return(FALSE)
+  })
+  
   print("after add study")
 }
 
-appendData_cate <- function(data){
-  dbSendQuery(conn,paste0("INSERT INTO study_categorization (research_focus, study_accession)
-	VALUES ('", input$research_focus, "', '", input$study_accession, "');"))
+insert_study_categorization <- function(){
+  rf <- if (length(input$research_focus)) as.character(input$research_focus[[1]]) else NA_character_
+  sa <- as.character(input$study_accession)
+
+  sql <- "INSERT INTO madi_dat.study_categorization (research_focus, study_accession)
+          VALUES ($1, $2)"
+  
+  print(paste("insert_study_categorization SQL ==>", sql))
+  print(paste("insert_study_categorization params ==> rf='", rf, "' sa='", sa, "'"))
+
+  DBI::dbExecute(
+    conn,
+    sql,
+    params = list(rf, sa)
+  )
 }
 
 appendData_cd <- function(data){
-  dbSendQuery(conn,paste0("INSERT INTO study_2_condition_or_disease 
-  (study_accession, condition_reported, condition_preferred)
-	VALUES ('", input$study_accession, 
-                          "', '", input$condition_reported, 
-                          "', '", input$condition_preferred, 
-                          "');"))
+  DBI::dbExecute(
+    conn,
+    "INSERT INTO madi_dat.study_2_condition_or_disease
+       (study_accession, condition_reported, condition_preferred)
+     VALUES ($1, $2, $3)",
+    params = list(
+      input$study_accession,
+      input$condition_reported %||% NA_character_,
+      input$condition_preferred %||% NA_character_
+    )
+  )
 }
 
 observeEvent(input$add_button, priority = 20,{
@@ -251,9 +344,19 @@ observeEvent(input$add_button, priority = 20,{
 })
 
 observeEvent(input$submit_add, priority = 20,{
-  appendData(formData())
-  appendData_cate(formData_cate())
-  appendData_cd(formData_cd())
+  ok <- FALSE
+  tryCatch({
+    DBI::dbWithTransaction(conn, {
+      if (!appendData(formData())) stop("study insert failed")
+      insert_study_categorization()
+      appendData_cd(formData_cd())
+    })
+    ok <- TRUE
+  }, error = function(e) {
+    print(paste("Create study transaction failed:", e$message))
+  })
+
+  if (ok) print("✅ Study + categorization + condition committed")
   shinyjs::reset("entry_form")
   removeModal()
 })
@@ -281,12 +384,12 @@ observeEvent(input$edit_button, priority = 20,{
     updateDateInput(session, "actual_completion_date", value = as.Date(SQL_df_study[, "actual_completion_date"]))
     updateNumericInput(session, "actual_enrollment", value = SQL_df_study[, "actual_enrollment"])
     updateDateInput(session, "actual_start_date", value = as.Date(SQL_df_study[, "actual_start_date"]))
-    updateTextInput(session, "age_unit", value = SQL_df_study[, "age_unit"])
+    updateSelectizeInput(session, "age_unit", selected = SQL_df_study[, "age_unit"])
     updateTextInput(session, "brief_description", value = SQL_df_study[, "brief_description"])
     updateTextInput(session, "brief_title", value = SQL_df_study[, "brief_title"])
     updateTextInput(session, "clinical_trial", value = SQL_df_study[, "clinical_trial"])
     updateTextInput(session, "condition_studied", value = SQL_df_study[, "condition_studied"])
-    updateTextInput(session, "dcl_id", value = SQL_df_study[, "dcl_id"])
+    updateSelectizeInput(session, "dcl_id", selected = SQL_df_study[, "dcl_id"])
     updateTextInput(session, "description", value = SQL_df_study[, "description"])
     updateTextInput(session, "doi", value = SQL_df_study[, "doi"])
     updateTextInput(session, "endpoints", value = SQL_df_study[, "endpoints"])
@@ -306,9 +409,9 @@ observeEvent(input$edit_button, priority = 20,{
     updateTextInput(session, "workspace_id", value = SQL_df_study[, "workspace_id"])
     ## ?
     updateTextInput(session, "condition_reported", value = SQL_df_cd[, "condition_reported"])
-    updateTextInput(session, "condition_preferred", value = SQL_df_cd[, "condition_preferred"])
+    updateSelectizeInput(session, "condition_preferred", selected = SQL_df_cd[, "condition_preferred"])
     ## ?
-    updateTextInput(session, "research_focus", value = SQL_df_cate[, "research_focus"])
+    updateSelectizeInput(session, "research_focus", selected = SQL_df_cate[, "research_focus"])
   }
 })
 
@@ -354,11 +457,13 @@ observeEvent(input$submit_edit, priority = 20, {
   
   update_db(operation = "update", table_name = "study_2_condition_or_disease", db_data = updated_data_cd, update_where = c("study_accession" = selected_study_accession()))
   
-  update_str_cate <- paste0("UPDATE study_categorization SET 
-                       research_focus =  NULLIF('", input$research_focus, "', ''),
-                       WHERE study_accession =  ", selected_study_accession(), ";")
-  
-  DBI::dbSendQuery(conn, update_str_cate)
+  DBI::dbExecute(
+    conn,
+    "UPDATE madi_dat.study_categorization
+       SET research_focus = NULLIF($1,'')
+     WHERE study_accession = $2",
+    params = list(input$research_focus, input$study_accession)
+  )
   
   removeModal()
 })
