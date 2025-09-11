@@ -255,6 +255,9 @@ output$immport_login_status <- renderText({
 output$immport_process_status <- renderText({ "System ready." })
 
 # --- CRITICAL FIX: Enhanced upload observer with proper package posting ---
+# IMPORTANT: packageName MUST be blank (empty string) for ZIP file uploads to ImmPort API
+# This resolves "Archived_Only_Not_Processed" errors that occur when packageName is populated
+# Reference: ImmPort support ticket feedback from Ruth Monteiro and Matt (Sept 2025)
 observeEvent(input$immport_zip_upload_button, {
   print("DEBUG: Upload button clicked")
   
@@ -397,12 +400,15 @@ observeEvent(input$immport_zip_upload_button, {
 
   # CRITICAL FIX: Ensure workspace ID is sent as STRING for form data
   workspace_id_string <- as.character(selected_workspace_id)
-  package_name_string <- paste0("MADI_", study_info, "_", strftime(Sys.time(), "%Y%m%d_%H%M%S"))
+  
+  # CRITICAL FIX: packageName must be BLANK for ZIP file uploads per ImmPort API requirements
+  # This was causing "Archived_Only_Not_Processed" errors when packageName was populated
+  package_name_string <- ""  # ✅ FIXED: Empty string for ZIP uploads as per ImmPort feedback
 
   # Prepare multipart form data for API with explicit string conversion
   body_params <- list(
     workspaceId = workspace_id_string,    # ✅ FIXED: Explicitly convert to string
-    packageName = package_name_string,    # ✅ Enhanced package name
+    packageName = package_name_string,    # ✅ CRITICAL: Must be blank for ZIP files
     uploadNotes = upload_notes_value,
     uploadPurpose = "uploadData",         # ✅ Fixed value as per API spec
     serverName = server_name_value,
@@ -414,15 +420,15 @@ observeEvent(input$immport_zip_upload_button, {
   print(paste("DEBUG: Upload URL:", upload_url))
   print(paste("DEBUG: Workspace ID (original):", selected_workspace_id, "| Type:", typeof(selected_workspace_id)))
   print(paste("DEBUG: Workspace ID (string):", workspace_id_string, "| Type:", typeof(workspace_id_string)))
-  print(paste("DEBUG: Package Name:", package_name_string))
+  print(paste("DEBUG: Package Name:", ifelse(nchar(package_name_string) == 0, "(BLANK - required for ZIP uploads)", package_name_string)))
   print(paste("DEBUG: Upload Purpose:", body_params$uploadPurpose))
   print(paste("DEBUG: Server Name:", server_name_value))
   print(paste("DEBUG: File size:", round(file.size(zip_filepath) / (1024^2), 2), "MB"))
   print(paste("DEBUG: Upload notes (first 100 chars):", substr(upload_notes_value, 1, 100), "..."))
   print(paste("DEBUG: Authorization token (first 20 chars):", substr(current_token, 1, 20), "..."))
   
-  # Verify all required form parameters are present
-  required_params <- c("workspaceId", "packageName", "uploadNotes", "uploadPurpose", "serverName", "file")
+  # Verify all required form parameters are present (packageName should be blank for ZIP uploads)
+  required_params <- c("workspaceId", "uploadNotes", "uploadPurpose", "serverName", "file")  # Removed packageName
   missing_params <- required_params[!required_params %in% names(body_params)]
   if (length(missing_params) > 0) {
     print(paste("DEBUG: ERROR - Missing required parameters:", paste(missing_params, collapse = ", ")))
@@ -430,6 +436,7 @@ observeEvent(input$immport_zip_upload_button, {
     return()
   }
   print("DEBUG: All required parameters present ✅")
+  print("DEBUG: packageName is blank as required for ZIP file uploads ✅")
 
   print("DEBUG: POSTING PACKAGE TO IMMPORT API...")
 
@@ -553,7 +560,7 @@ observeEvent(input$immport_zip_upload_button, {
       print("DEBUG: *** UPLOAD SUCCESS SUMMARY ***")
       print(paste("DEBUG: ✅ Ticket Number:", ticket_num))
       print(paste("DEBUG: ✅ Target Workspace:", selected_workspace_id))
-      print(paste("DEBUG: ✅ Package Name:", package_name_string))
+      print(paste("DEBUG: ✅ Package Name:", ifelse(nchar(package_name_string) == 0, "(BLANK - required for ZIP uploads)", package_name_string)))
       print(paste("DEBUG: ✅ Package File:", basename(zip_filepath)))
       print(paste("DEBUG: ✅ Templates Count:", length(current_templates)))
       print(paste("DEBUG: ✅ Files Count:", length(current_files)))
@@ -574,7 +581,7 @@ observeEvent(input$immport_zip_upload_button, {
                                  "- Files:", paste(sapply(current_files, function(f) f$name), collapse = ", ")),
             study_accession_id = study_info,
             notes = paste("SUCCESSFUL PACKAGE UPLOAD to ImmPort workspace", selected_workspace_id,
-                          "- Package name:", package_name_string,
+                          "- Package name:", ifelse(nchar(package_name_string) == 0, "(blank for ZIP)", package_name_string),
                           "- Upload notes:", upload_notes_value),
             status_summary_cache = paste("Package upload successful at", Sys.time(), "- Ticket:", ticket_num)
           )
@@ -639,7 +646,7 @@ observeEvent(input$immport_zip_upload_button, {
     print("DEBUG: *** UPLOAD FAILURE SUMMARY ***")
     print(paste("DEBUG: ❌ HTTP Status:", status))
     print(paste("DEBUG: ❌ Target Workspace:", selected_workspace_id))
-    print(paste("DEBUG: ❌ Package Name:", package_name_string))
+    print(paste("DEBUG: ❌ Package Name:", ifelse(nchar(package_name_string) == 0, "(BLANK - required for ZIP uploads)", package_name_string)))
     print(paste("DEBUG: ❌ Error Message:", error_message))
     print(paste("DEBUG: ❌ Raw Response:", substr(response_content_raw, 1, 500)))
     print("DEBUG: *** END UPLOAD FAILURE SUMMARY ***")
