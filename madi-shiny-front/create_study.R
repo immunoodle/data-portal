@@ -50,20 +50,27 @@ newstudy <- reactive({
   input$submit_add
   input$submit_edit
 
-  ws <- as.integer(userData_upload()$workspace_id)
-  sql <- "
-    SELECT study.study_accession, actual_completion_date, actual_enrollment, actual_start_date, age_unit,
-           brief_description, brief_title, clinical_trial, condition_studied, dcl_id, description, doi,
-           endpoints, gender_included, hypothesis, initial_data_release_date, initial_data_release_version,
-           intervention_agent, latest_data_release_date, latest_data_release_version, maximum_age, minimum_age,
-           objectives, official_title, sponsoring_organization, target_enrollment, workspace_id,
-           condition_reported, condition_preferred, research_focus
-    FROM madi_dat.study
-    LEFT JOIN madi_dat.study_2_condition_or_disease AS cd USING (study_accession)
-    LEFT JOIN madi_dat.study_categorization AS sc USING (study_accession)
-    WHERE workspace_id = $1;
-  "
-  DBI::dbGetQuery(conn, sql, params = list(ws))
+  tryCatch({
+    ws <- as.integer(userData_upload()$workspace_id)
+    
+    sql <- "
+      SELECT study.study_accession, actual_completion_date, actual_enrollment, actual_start_date, age_unit,
+             brief_description, brief_title, clinical_trial, condition_studied, dcl_id, description, doi,
+             endpoints, gender_included, hypothesis, initial_data_release_date, initial_data_release_version,
+             intervention_agent, latest_data_release_date, latest_data_release_version, maximum_age, minimum_age,
+             objectives, official_title, sponsoring_organization, target_enrollment, workspace_id,
+             condition_reported, condition_preferred, research_focus
+      FROM madi_dat.study
+      LEFT JOIN madi_dat.study_2_condition_or_disease AS cd USING (study_accession)
+      LEFT JOIN madi_dat.study_categorization AS sc USING (study_accession)
+      WHERE workspace_id = $1;
+    "
+    result <- DBI::dbGetQuery(conn, sql, params = list(ws))
+    return(result)
+  }, error = function(e) {
+    warning(paste("Error in newstudy():", e$message))
+    return(data.frame())
+  })
 })  
 
 observeEvent(input$newstudy_table_rows_selected, {
@@ -72,8 +79,20 @@ observeEvent(input$newstudy_table_rows_selected, {
 })
 
 components <- reactive({
-  query<-paste0("SELECT * FROM madi_meta.in_front_study WHERE study_accession IN ('", selected_study_accession(), "');")
-  components<-DBI::dbGetQuery(conn, query)
+  tryCatch({
+    study_acc <- selected_study_accession()
+    
+    if (is.null(study_acc) || length(study_acc) == 0 || study_acc == "") {
+      return(data.frame())
+    }
+    
+    query <- paste0("SELECT * FROM madi_meta.in_front_study WHERE study_accession IN ('", study_acc, "');")
+    components <- DBI::dbGetQuery(conn, query)
+    return(components)
+  }, error = function(e) {
+    warning(paste("Error in components():", e$message))
+    return(data.frame())
+  })
 })
 
 #List of mandatory fields for submission
@@ -117,7 +136,22 @@ entry_form <- function(button_id){
                   textInput(
                     "study_accession", 
                     labelMandatory("Study Accession"), 
-                    value = DBI::dbGetQuery(conn, "SELECT CONCAT('SDY', MAX(CAST(SUBSTRING(study_accession,4) AS INTEGER))+1) AS next FROM madi_dat.study;")[["next"]][1]
+                    value = tryCatch({
+                      result <- DBI::dbGetQuery(conn, "
+                        SELECT CONCAT('SDY', COALESCE(MAX(
+                          CASE 
+                            WHEN study_accession ~ '^SDY[0-9]+$' 
+                            THEN CAST(SUBSTRING(study_accession,4) AS INTEGER)
+                            ELSE NULL 
+                          END
+                        ), 0) + 1) AS next 
+                        FROM madi_dat.study;
+                      ")
+                      result[["next"]][1]
+                    }, error = function(e) {
+                      warning(paste("Error generating study accession:", e$message))
+                      "SDY1"  # fallback
+                    })
                   )
                 ),
                 dateInput("actual_completion_date", "Actual Completion Date", value = NULL, format = "yyyy-mm-dd"),
@@ -230,11 +264,9 @@ formData_cd <- reactive({
 
 #Add data
 appendData <- function(data){
-  print("before add study")
-  print(paste("DEBUG: appendData called with data:", class(data)))
-  
-  # Build a Postgres-style parameterized INSERT
-  sql_insert <- "
+  tryCatch({
+    # Build a Postgres-style parameterized INSERT
+    sql_insert <- "
 INSERT INTO madi_dat.study (
   study_accession, actual_completion_date, actual_enrollment, actual_start_date, age_unit,
   brief_description, brief_title, clinical_trial, condition_studied, dcl_id, description, doi,
@@ -250,61 +282,50 @@ INSERT INTO madi_dat.study (
 );
 "
 
-  # Convert inputs to correctly-typed R values (so NULL/NA become SQL NULLs)
-  p1  <- if (isTruthy(input$study_accession)) as.character(input$study_accession) else NA_character_
-  p2  <- if (length(input$actual_completion_date)) as.Date(input$actual_completion_date) else as.Date(NA)
-  p3  <- if (isTruthy(input$actual_enrollment)) as.integer(input$actual_enrollment) else NA_integer_
-  p4  <- if (length(input$actual_start_date)) as.Date(input$actual_start_date) else as.Date(NA)
-  p5  <- if (isTruthy(input$age_unit)) as.character(input$age_unit) else NA_character_
-  p6  <- nv(input$brief_description)
-  p7  <- nv(input$brief_title)
-  p8  <- nv(toupper(substr(trimws(input$clinical_trial %||% ""), 1, 1))) # "Y"/"N"
-  p9  <- nv(input$condition_studied)
-  p10 <- if (isTruthy(input$dcl_id)) as.integer(input$dcl_id) else NA_integer_
-  p11 <- nv(input$description)
-  p12 <- nv(input$doi)
-  p13 <- nv(input$endpoints)
-  p14 <- nv(input$gender_included)
-  p15 <- nv(input$hypothesis)
-  p16 <- if (length(input$initial_data_release_date)) as.Date(input$initial_data_release_date) else as.Date(NA)
-  p17 <- nv(input$initial_data_release_version)
-  p18 <- nv(input$intervention_agent)
-  p19 <- if (length(input$latest_data_release_date)) as.Date(input$latest_data_release_date) else as.Date(NA)
-  p20 <- nv(input$latest_data_release_version)
-  p21 <- nv(as.character(input$maximum_age)) # Keep as text since DB expects varchar
-  p22 <- nv(as.character(input$minimum_age)) # Keep as text since DB expects varchar
-  p23 <- nv(input$objectives)
-  p24 <- nv(input$official_title)
-  p25 <- nv(input$sponsoring_organization)
-  p26 <- if (isTruthy(input$target_enrollment)) as.integer(input$target_enrollment) else NA_integer_
-  p27 <- as.integer(input$workspace_id)
+    # Convert inputs to correctly-typed R values (so NULL/NA become SQL NULLs)
+    p1  <- if (isTruthy(input$study_accession)) as.character(input$study_accession) else NA_character_
+    p2  <- if (length(input$actual_completion_date)) as.Date(input$actual_completion_date) else as.Date(NA)
+    p3  <- if (isTruthy(input$actual_enrollment)) as.integer(input$actual_enrollment) else NA_integer_
+    p4  <- if (length(input$actual_start_date)) as.Date(input$actual_start_date) else as.Date(NA)
+    p5  <- if (isTruthy(input$age_unit)) as.character(input$age_unit) else NA_character_
+    p6  <- nv(input$brief_description)
+    p7  <- nv(input$brief_title)
+    p8  <- nv(toupper(substr(trimws(input$clinical_trial %||% ""), 1, 1))) # "Y"/"N"
+    p9  <- nv(input$condition_studied)
+    p10 <- if (isTruthy(input$dcl_id)) as.integer(input$dcl_id) else NA_integer_
+    p11 <- nv(input$description)
+    p12 <- nv(input$doi)
+    p13 <- nv(input$endpoints)
+    p14 <- nv(input$gender_included)
+    p15 <- nv(input$hypothesis)
+    p16 <- if (length(input$initial_data_release_date)) as.Date(input$initial_data_release_date) else as.Date(NA)
+    p17 <- nv(input$initial_data_release_version)
+    p18 <- nv(input$intervention_agent)
+    p19 <- if (length(input$latest_data_release_date)) as.Date(input$latest_data_release_date) else as.Date(NA)
+    p20 <- nv(input$latest_data_release_version)
+    p21 <- nv(as.character(input$maximum_age)) # Keep as text since DB expects varchar
+    p22 <- nv(as.character(input$minimum_age)) # Keep as text since DB expects varchar
+    p23 <- nv(input$objectives)
+    p24 <- nv(input$official_title)
+    p25 <- nv(input$sponsoring_organization)
+    p26 <- if (isTruthy(input$target_enrollment)) as.integer(input$target_enrollment) else NA_integer_
+    p27 <- as.integer(input$workspace_id)
 
-  params <- list(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23,p24,p25,p26,p27)
+    params <- list(p1,p2,p3,p4,p5,p6,p7,p8,p9,p10,p11,p12,p13,p14,p15,p16,p17,p18,p19,p20,p21,p22,p23,p24,p25,p26,p27)
 
-  print("DEBUG: Parameter summary:")
-  for(i in 1:length(params)) {
-    param_val <- params[[i]]
-    print(paste("  Param", i, ":", class(param_val), "length:", length(param_val), "value:", toString(param_val)))
-  }
-
-  tryCatch({
     result <- DBI::dbExecute(conn, sql_insert, params = params)
-    print(paste("Study inserted successfully! Rows affected:", result))
     
     # Only proceed with categorization and condition if study was inserted successfully
     if(result > 0) {
-      print("Study insert successful, proceeding with categorization and condition...")
       return(TRUE)  # Signal success
     } else {
-      print("Study insert failed - no rows affected")
       return(FALSE)
     }
+    
   }, error = function(e) {
-    print(paste("SQL insert failed:", e$message))
+    warning(paste("Error in appendData():", e$message))
     return(FALSE)
   })
-  
-  print("after add study")
 }
 
 insert_study_categorization <- function(){
@@ -471,13 +492,49 @@ observeEvent(input$submit_edit, priority = 20, {
 
 ############ report ################
 output$report_list_table <- DT::renderDataTable({
-  components_tab <- components()
-  names(components_tab) <- c("study_accession", "form", "status")
-  components_tab <- datatable(components_tab,
-                              rownames = FALSE,
-                              selection = list(target="row", selected=selectedRow()),
-                              options = list(searching = FALSE, lengthChange = FALSE, scrollX = TRUE)
-  )
+  tryCatch({
+    components_tab <- components()
+    
+    if (nrow(components_tab) == 0) {
+      # Create an empty dataframe with the expected structure
+      empty_df <- data.frame(
+        study_accession = character(0),
+        form = character(0),
+        status = character(0),
+        stringsAsFactors = FALSE
+      )
+      
+      components_tab <- datatable(empty_df,
+                                  rownames = FALSE,
+                                  selection = list(target="row", selected=selectedRow()),
+                                  options = list(searching = FALSE, lengthChange = FALSE, scrollX = TRUE)
+      )
+      return(components_tab)
+    }
+    
+    # Only set names if we have the expected number of columns
+    if (ncol(components_tab) >= 3) {
+      names(components_tab) <- c("study_accession", "form", "status")
+    }
+    
+    components_tab <- datatable(components_tab,
+                                rownames = FALSE,
+                                selection = list(target="row", selected=selectedRow()),
+                                options = list(searching = FALSE, lengthChange = FALSE, scrollX = TRUE)
+    )
+    return(components_tab)
+    
+  }, error = function(e) {
+    warning(paste("Error in report_list_table:", e$message))
+    # Return an empty datatable with proper structure
+    empty_df <- data.frame(
+      study_accession = character(0),
+      form = character(0),
+      status = character(0),
+      stringsAsFactors = FALSE
+    )
+    return(datatable(empty_df, options = list(searching = FALSE, lengthChange = FALSE)))
+  })
 })
 
 
