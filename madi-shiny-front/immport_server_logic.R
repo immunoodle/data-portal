@@ -926,6 +926,48 @@ observeEvent(input$immport_generate_button, {
   # 2. Get inputs from UI
   current_study_accession <- trimws(input$immport_study_accession)
   selected_file_numbers <- input$immport_template_select
+  
+  # 2b. Get ImmPort template settings for control samples and similar templates
+  immport_template_settings <- NULL
+  if ("14" %in% selected_file_numbers) { # controlSamples.json is template #14
+    immport_template_settings <- list(
+      immportTemplate = input$immport_template_use_standard %||% "Yes",
+      resultFileName = if (!is.null(input$immport_template_result_filename) && 
+                          nchar(trimws(input$immport_template_result_filename)) > 0) {
+                        trimws(input$immport_template_result_filename)
+                      } else {
+                        NULL
+                      },
+      additionalResultFileNames = if (!is.null(input$immport_template_additional_files) && 
+                                     nchar(trimws(input$immport_template_additional_files)) > 0) {
+                                   trimws(input$immport_template_additional_files)
+                                 } else {
+                                   NULL
+                                 }
+    )
+    
+    # Validation: if user selected "No" but didn't provide result file name
+    if (immport_template_settings$immportTemplate == "No" && is.null(immport_template_settings$resultFileName)) {
+      showModal(modalDialog(
+        title = "Missing Result File Name", 
+        div(
+          p("You selected 'No - Custom result files' but didn't specify a result file name."),
+          p("Please either:"),
+          tags$ul(
+            tags$li("Select 'Yes - Use MBAA_Results.json' to use the standard ImmPort template, OR"),
+            tags$li("Provide a custom result file name in the 'Result File Name' field")
+          )
+        ),
+        easyClose = TRUE
+      ))
+      return()
+    }
+    
+    message(paste("ImmPort template settings:", 
+                  "Use Standard:", immport_template_settings$immportTemplate,
+                  "| Result File:", immport_template_settings$resultFileName %||% "(none)",
+                  "| Additional Files:", immport_template_settings$additionalResultFileNames %||% "(none)"))
+  }
 
   # 3. Basic R-side validation
   if (is.null(current_study_accession) || nchar(current_study_accession) == 0) {
@@ -974,10 +1016,20 @@ observeEvent(input$immport_generate_button, {
   # 5. Call the Python function
   python_output_list <- NULL
   tryCatch({
-    python_output_list <- process_and_return_data_py(
-      study_accession_str = current_study_accession,
-      file_numbers_list_str = as.list(selected_file_numbers)
-    )
+    if (!is.null(immport_template_settings)) {
+      # Call with ImmPort template settings
+      python_output_list <- process_and_return_data_py(
+        study_accession_str = current_study_accession,
+        file_numbers_list_str = as.list(selected_file_numbers),
+        immport_template_settings = immport_template_settings
+      )
+    } else {
+      # Call without template settings (standard behavior)
+      python_output_list <- process_and_return_data_py(
+        study_accession_str = current_study_accession,
+        file_numbers_list_str = as.list(selected_file_numbers)
+      )
+    }
   }, error = function(e) {
     message(paste("R Error: Call to Python function 'process_and_return_data_py' failed:", e$message))
     showNotification(paste("Error communicating with Python:", e$message), type = "error", duration = 10)

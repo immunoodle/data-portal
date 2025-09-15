@@ -121,6 +121,44 @@ immport_upload_ui <- function() {
                    options = shinyWidgets::pickerOptions(actionsBox = TRUE, liveSearch = TRUE,
                                                          selectedTextFormat = "count > 3",
                                                          countSelectedText = "{0} templates selected")
+                 ),
+                 
+                 # ImmPort Template Settings - appears when control samples is selected
+                 conditionalPanel(
+                   condition = "input.immport_template_select && input.immport_template_select.includes('14')", # controlSamples.json is value 14
+                   div(style = "margin-top: 15px; padding: 10px; background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 4px;",
+                       h5("📋 ImmPort Template Settings", style = "color: #856404; margin-bottom: 10px;"),
+                       div(style = "font-size: 0.9em; color: #856404; margin-bottom: 10px;",
+                           "These settings apply to templates that support ImmPort result files (like Control Samples, MBAA, etc.)"),
+                       
+                       fluidRow(
+                         column(width = 6,
+                                radioButtons("immport_template_use_standard", 
+                                           "Use ImmPort Standard Template?",
+                                           choices = list("Yes - Use MBAA_Results.json" = "Yes",
+                                                         "No - Custom result files" = "No"),
+                                           selected = "Yes",
+                                           inline = FALSE)
+                         ),
+                         column(width = 6,
+                                conditionalPanel(
+                                  condition = "input.immport_template_use_standard == 'No'",
+                                  textInput("immport_template_result_filename", 
+                                           "Result File Name:",
+                                           placeholder = "e.g., custom_results.txt",
+                                           value = "")
+                                )
+                         )
+                       ),
+                       
+                       conditionalPanel(
+                         condition = "input.immport_template_use_standard == 'No' || true", # Always show for additional files
+                         textInput("immport_template_additional_files", 
+                                  "Additional Result Files (optional):",
+                                  placeholder = "e.g., bead_data.csv;raw_readings.txt (semicolon-separated)",
+                                  value = "")
+                       )
+                   )
                  )
              ),
 

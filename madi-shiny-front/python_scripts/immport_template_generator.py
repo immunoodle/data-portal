@@ -1390,10 +1390,28 @@ def get_lab_tests_data(conn, study_accession):
     
     return result
 
-def get_control_samples_data(conn, study_accession):
+def get_control_samples_data(conn, study_accession, immport_template_settings=None):
     """
     Retrieve control samples data for a given study accession and format it according to the template.
+    
+    Args:
+        conn: Database connection
+        study_accession: Study accession ID
+        immport_template_settings: Dict with global settings for ImmPort template fields
+                                 {
+                                     "immportTemplate": "Yes" or "No",
+                                     "resultFileName": "filename.txt" (if immportTemplate is "No"),
+                                     "additionalResultFileNames": "file1.txt;file2.txt"
+                                 }
     """
+    # Default settings if none provided
+    if immport_template_settings is None:
+        immport_template_settings = {
+            "immportTemplate": "Yes",  # Default to Yes for MBAA standard template
+            "resultFileName": None,    # Only needed if immportTemplate is "No"
+            "additionalResultFileNames": None
+        }
+    
     result = {
         "templateType": "combined",
         "fileName": "controlSamples.json",
@@ -1456,6 +1474,17 @@ def get_control_samples_data(conn, study_accession):
                 "measurementTechnique": row[11], # measurement_technique
                 "protocolIds": row[12].split(';') if row[12] else []  # protocol_ids
             }
+            
+            # Add ImmPort template fields (same for all samples in this batch)
+            entry["immportTemplate"] = immport_template_settings["immportTemplate"]
+            
+            # Only add result file name if immportTemplate is "No"
+            if immport_template_settings["immportTemplate"] == "No" and immport_template_settings.get("resultFileName"):
+                entry["resultFileName"] = immport_template_settings["resultFileName"]
+                
+            # Add additional result files if specified
+            if immport_template_settings.get("additionalResultFileNames"):
+                entry["additionalResultFileNames"] = immport_template_settings["additionalResultFileNames"]
             
             # Add optional fields if they have values
             optional_fields = {
@@ -5847,10 +5876,20 @@ def _get_db_connection():
     
 
 
-def process_and_return_data_py(study_accession_str, file_numbers_list_str):
+def process_and_return_data_py(study_accession_str, file_numbers_list_str, immport_template_settings=None):
     conn = None
     generated_data_for_r = {}
     processing_messages_for_r = []
+
+    # Convert immport_template_settings from R format if provided
+    template_settings = None
+    if immport_template_settings is not None:
+        template_settings = {
+            "immportTemplate": immport_template_settings.get("immportTemplate", "Yes"),
+            "resultFileName": immport_template_settings.get("resultFileName"),
+            "additionalResultFileNames": immport_template_settings.get("additionalResultFileNames")
+        }
+        print(f"DEBUG: Received ImmPort template settings: {template_settings}")
 
     data_fetch_functions = {
         1: ('basic_study_design.json', get_study_data),
@@ -5923,8 +5962,13 @@ def process_and_return_data_py(study_accession_str, file_numbers_list_str):
                     filename, fetch_function_object = data_fetch_functions[number] # fetch_function_object IS the function
                     processing_messages_for_r.append(f"PY: Processing {filename} (Number {number})...")
                     
-                    # Directly call the function object obtained from the dictionary
-                    data_for_this_file = fetch_function_object(conn, study_accession_str) # This is the key part
+                    # Special handling for control samples with ImmPort template settings
+                    if number == 14 and template_settings is not None:  # controlSamples.json
+                        processing_messages_for_r.append(f"PY: Using ImmPort template settings for {filename}")
+                        data_for_this_file = fetch_function_object(conn, study_accession_str, template_settings)
+                    else:
+                        # Standard call for other templates
+                        data_for_this_file = fetch_function_object(conn, study_accession_str)
                     
                     generated_data_for_r[filename] = data_for_this_file
                     processing_messages_for_r.append(f"PY: Data for {filename} processed.")
