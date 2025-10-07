@@ -457,6 +457,9 @@ server <- function(input, output, session) {
 
   exchange_code_for_token <- function(auth_code) {
     message("Attempting token exchange...")
+    message("🔍 [SSL DEBUG] Token endpoint: ", DEX_TOKEN_ENDPOINT)
+    message("🔍 [SSL DEBUG] CA cert path: ", if(!is.null(DEX_CA_CERT_PATH) && nzchar(DEX_CA_CERT_PATH)) DEX_CA_CERT_PATH else "(not set)")
+    
     tryCatch({
       token_req <- httr2::request(DEX_TOKEN_ENDPOINT) |>
         httr2::req_method("POST") |>
@@ -471,7 +474,17 @@ server <- function(input, output, session) {
           "Accept" = "application/json",
           "Content-Type" = "application/x-www-form-urlencoded"
         )
+      
+      # Add custom CA certificate if provided
+      if (!is.null(DEX_CA_CERT_PATH) && nzchar(DEX_CA_CERT_PATH) && file.exists(DEX_CA_CERT_PATH)) {
+        message("✅ [SSL DEBUG] Adding CA cert to token request: ", DEX_CA_CERT_PATH)
+        token_req <- token_req |> httr2::req_options(cainfo = DEX_CA_CERT_PATH)
+      } else {
+        message("ℹ️  [SSL DEBUG] No custom CA cert for token exchange - using system defaults")
+      }
+      
       resp <- httr2::req_perform(token_req)
+      message("✅ [SSL DEBUG] Token exchange successful!")
       token_data <- httr2::resp_body_json(resp)
       if (is.null(token_data$id_token)) stop("No id_token received from token endpoint.")
       validated_payload <- validate_id_token(token_data$id_token)
@@ -545,7 +558,7 @@ server <- function(input, output, session) {
 
     if (is.character(payload) && payload == "refetch_jwks") {
       message("Re-fetching JWKS and retrying validation...")
-      fresh_keys <- get_jwks(DEX_JWKS_ENDPOINT)
+      fresh_keys <- get_jwks(DEX_JWKS_ENDPOINT, DEX_CA_CERT_PATH)
       if (!is.null(fresh_keys)) {
         jwks_cache(fresh_keys)
         payload <- perform_validation(id_token, fresh_keys)
