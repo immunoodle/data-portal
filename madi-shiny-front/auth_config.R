@@ -42,19 +42,28 @@ APP_REDIRECT_URI <- determine_redirect_uri()
 get_oidc_discovery <- function(issuer_url, ca_cert_path = NULL) {
   discovery_url <- paste0(issuer_url, "/.well-known/openid-configuration")
   
+  cat("🔍 [SSL DEBUG] get_oidc_discovery() called\n")
+  cat("🔍 [SSL DEBUG] issuer_url:", issuer_url, "\n")
+  cat("🔍 [SSL DEBUG] ca_cert_path provided:", !is.null(ca_cert_path) && nzchar(ca_cert_path), "\n")
+  
   tryCatch({
     req <- httr2::request(discovery_url)
     
     # Add custom CA certificate if provided
     if (!is.null(ca_cert_path) && nzchar(ca_cert_path) && file.exists(ca_cert_path)) {
-      cat("Using custom CA certificate:", ca_cert_path, "\n")
+      cat("✅ [SSL DEBUG] Using custom CA certificate:", ca_cert_path, "\n")
       req <- req |> httr2::req_options(cainfo = ca_cert_path)
+    } else if (!is.null(ca_cert_path) && nzchar(ca_cert_path)) {
+      cat("⚠️  [SSL DEBUG] CA cert path provided but file not found:", ca_cert_path, "\n")
+    } else {
+      cat("ℹ️  [SSL DEBUG] No custom CA cert - using system defaults\n")
     }
     
     resp <- req |>
       httr2::req_perform() |>
       httr2::resp_body_json()
-      
+    
+    cat("✅ [SSL DEBUG] OIDC discovery successful!\n")
     return(resp)
     
   }, error = function(e) {
@@ -65,8 +74,10 @@ get_oidc_discovery <- function(issuer_url, ca_cert_path = NULL) {
 
 # Skip OIDC discovery and configuration in local dev mode
 if (IS_LOCAL_DEV) {
+  cat("====================================\n")
   cat("⚠️  LOCAL_DEV mode enabled - Skipping OIDC configuration\n")
   cat("Authentication will be bypassed with dummy user credentials\n")
+  cat("====================================\n")
   
   # Set dummy values to prevent errors
   oidc_config <- NULL
@@ -78,6 +89,11 @@ if (IS_LOCAL_DEV) {
   OIDC_SCOPES <- "openid profile email"
   
 } else {
+  cat("====================================\n")
+  cat("🔐 Production OIDC mode enabled\n")
+  cat("🔍 [SSL DEBUG] DEX_CA_CERT_PATH:", if(nzchar(DEX_CA_CERT_PATH)) DEX_CA_CERT_PATH else "(empty - using system CA bundle)", "\n")
+  cat("====================================\n")
+  
   # Production mode - perform normal OIDC discovery
   oidc_config <- get_oidc_discovery(DEX_ISSUER, DEX_CA_CERT_PATH)
 
