@@ -21,6 +21,12 @@ DEX_CA_CERT_PATH <- Sys.getenv("DEX_CA_CERT_PATH", unset = "")
 # === CRITICAL FIX: Redirect URI Configuration ===
 # Determine the correct redirect URI based on environment
 determine_redirect_uri <- function() {
+  # Check if APP_REDIRECT_URI environment variable exists and is not empty
+  app_redirect_uri_env <- Sys.getenv("APP_REDIRECT_URI")
+  if (app_redirect_uri_env != "") {
+    return(app_redirect_uri_env)
+  }
+
   # Check if HOSTNAME environment variable exists and is not empty
   hostname_env <- Sys.getenv("HOSTNAME")
   if (hostname_env != "") {
