@@ -140,6 +140,7 @@ The application expects a PostgreSQL database with the following schemas:
 | Variable | Description | Default |
 |----------|-------------|---------|
 | `LOCAL_DEV` | Enable local development mode | `0` |
+| `DEX_INTERNAL_URL` | Internal Dex URL for backend communication (fixes hairpinning) | `http://dex-service:5556/dex` |
 | `upload_file_path` | Local file upload path | `/data/uploaded_templates` |
 | `ImmPortUsername` | ImmPort integration username | - |
 | `ImmPortPassword` | ImmPort integration password | - |

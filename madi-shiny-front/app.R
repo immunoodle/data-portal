@@ -70,6 +70,14 @@ print("Sourcing auth_config.R...")
 source("auth_config.R", local = FALSE) # Source globally
 print("Finished sourcing auth_config.R")
 
+# --- Debug printing from HEAD ---
+print("--- Final Auth Config Values ---")
+print(paste("DEX_ISSUER:", DEX_ISSUER))
+print(paste("DEX_INTERNAL_URL:", if(exists("DEX_INTERNAL_URL")) DEX_INTERNAL_URL else "NOT SET"))
+print(paste("DEX_AUTH_ENDPOINT:", DEX_AUTH_ENDPOINT))
+print(paste("DEX_TOKEN_ENDPOINT:", DEX_TOKEN_ENDPOINT))
+print(paste("DEX_JWKS_ENDPOINT:", DEX_JWKS_ENDPOINT))
+
 # --- 1. Define the UI content that appears AFTER a user is authenticated ---
 authenticated_body_content <- function() {
   fluidPage(

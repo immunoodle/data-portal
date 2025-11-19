@@ -12,6 +12,7 @@ if (!require(jsonlite)) install.packages("jsonlite")
 IS_LOCAL_DEV <- Sys.getenv("LOCAL_DEV", unset = "0") == "1"
 
 DEX_ISSUER <- Sys.getenv("DEX_ISSUER")
+DEX_INTERNAL_URL <- Sys.getenv("DEX_INTERNAL_URL") # Optional
 DEX_CLIENT_ID <- Sys.getenv("DEX_CLIENT_ID")
 DEX_CLIENT_SECRET <- Sys.getenv("DEX_CLIENT_SECRET")
 DEX_LOGOUT_ENDPOINT <- Sys.getenv("DEX_LOGOUT_ENDPOINT")
@@ -95,12 +96,25 @@ if (IS_LOCAL_DEV) {
   cat("====================================\n")
   
   # Production mode - perform normal OIDC discovery
-  oidc_config <- get_oidc_discovery(DEX_ISSUER, DEX_CA_CERT_PATH)
+  # 1. Discovery: Use Internal if available, else Public
+  discovery_base <- if (nzchar(DEX_INTERNAL_URL)) DEX_INTERNAL_URL else DEX_ISSUER
+  if (nzchar(DEX_INTERNAL_URL)) message(paste("Using DEX_INTERNAL_URL for discovery:", DEX_INTERNAL_URL))
+  oidc_config <- get_oidc_discovery(discovery_base, DEX_CA_CERT_PATH)
 
   # Extract endpoints
-  DEX_AUTH_ENDPOINT <- oidc_config$authorization_endpoint %||% DEX_AUTH_ENDPOINT
-  DEX_TOKEN_ENDPOINT <- oidc_config$token_endpoint %||% DEX_TOKEN_ENDPOINT
-  DEX_JWKS_ENDPOINT <- oidc_config$jwks_uri %||% DEX_JWKS_ENDPOINT
+  # 2. Browser Endpoint: ALWAYS use Public
+  DEX_AUTH_ENDPOINT <- oidc_config$authorization_endpoint %||% paste0(DEX_ISSUER, "/auth")
+
+  # 3. Server Endpoints: Use Internal if available
+  if (nzchar(DEX_INTERNAL_URL)) {
+    message("Using DEX_INTERNAL_URL for Token and JWKS endpoints.")
+    DEX_TOKEN_ENDPOINT <- paste0(DEX_INTERNAL_URL, "/token")
+    DEX_JWKS_ENDPOINT  <- paste0(DEX_INTERNAL_URL, "/keys")
+  } else {
+    DEX_TOKEN_ENDPOINT <- oidc_config$token_endpoint
+    DEX_JWKS_ENDPOINT  <- oidc_config$jwks_uri
+  }
+
   DEX_USERINFO_ENDPOINT <- oidc_config$userinfo_endpoint
   DEX_LOGOUT_ENDPOINT <- oidc_config$end_session_endpoint %||% DEX_LOGOUT_ENDPOINT
 
@@ -144,7 +158,8 @@ get_jwks <- function(jwks_url, ca_cert_path = NULL) {
 
 # Test OIDC discovery document (optional but helpful for debugging)
 test_oidc_discovery <- function(ca_cert_path = NULL) {
-  discovery_url <- paste0(DEX_ISSUER, "/.well-known/openid-configuration")
+  base_url <- if (nzchar(DEX_INTERNAL_URL)) DEX_INTERNAL_URL else DEX_ISSUER
+  discovery_url <- paste0(base_url, "/.well-known/openid-configuration")
   
   tryCatch({
     req <- httr2::request(discovery_url) |>
