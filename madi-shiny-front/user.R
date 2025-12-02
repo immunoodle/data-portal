@@ -261,77 +261,61 @@ observe({
           current_time <- format(Sys.time(), "%Y%m%d_%H%M")
           workspace_name <- paste0(username, "_workspace_", current_time)
           
-          # Get the next workspace_id
-          workspace_id_query <- "
-            SELECT COALESCE(MAX(workspace_id), 0) + 1 AS next_id 
-            FROM madi_dat.workspace;"
+          # Create workspace - let PostgreSQL auto-generate workspace_id using sequence
+          workspace_insert_query <- "
+            INSERT INTO madi_dat.workspace (name, category, type)
+            VALUES ($1, $2, $3)
+            RETURNING workspace_id;"
           
-          next_workspace_id <- tryCatch({
-            result <- DBI::dbGetQuery(conn, workspace_id_query)
-            as.integer(result$next_id[1])
+          new_workspace_result <- tryCatch({
+            DBI::dbGetQuery(conn, workspace_insert_query, params = list(
+              workspace_name,
+              "Project",   # Using "Project" as category
+              "PW"         # Standard type
+            ))
           }, error = function(e) {
-            warning(paste("Failed to get next workspace ID:", e$message))
+            warning(paste("Failed to create workspace for existing user:", e$message))
             return(NULL)
           })
           
-          if (!is.null(next_workspace_id) && !is.na(next_workspace_id)) {
-            # Create workspace with explicit workspace_id
-            workspace_insert_query <- "
-              INSERT INTO madi_dat.workspace (workspace_id, name, category, type)
-              VALUES ($1, $2, $3, $4)
-              RETURNING workspace_id;"
+          if (!is.null(new_workspace_result) && nrow(new_workspace_result) > 0) {
+            new_workspace_id <- new_workspace_result$workspace_id[1]
+            print(paste0("DEBUG: Created workspace ID: ", new_workspace_id, " for existing user"))
             
-            new_workspace_result <- tryCatch({
-              DBI::dbGetQuery(conn, workspace_insert_query, params = list(
-                next_workspace_id,
-                workspace_name,
-                "Project",   # Using "Project" as category
-                "PW"         # Standard type
-              ))
+            # Update user's workspace_id
+            update_user_query <- "UPDATE madi_track.users SET workspace_id = $1 WHERE oauth_unique_id = $2"
+            tryCatch({
+              DBI::dbExecute(conn, update_user_query, params = list(new_workspace_id, current_user_compress))
+              print("DEBUG: Updated user's workspace_id")
             }, error = function(e) {
-              warning(paste("Failed to create workspace for existing user:", e$message))
-              return(NULL)
+              warning(paste("Failed to update user workspace:", e$message))
             })
             
-            if (!is.null(new_workspace_result) && nrow(new_workspace_result) > 0) {
-              new_workspace_id <- new_workspace_result$workspace_id[1]
-              print(paste0("DEBUG: Created workspace ID: ", new_workspace_id, " for existing user"))
+            # Grant owner access
+            access_insert_query <- "
+              INSERT INTO madi_track.workspace_access (workspace_id, user_email, role)
+              VALUES ($1, $2, 'owner');"
+            
+            tryCatch({
+              DBI::dbExecute(conn, access_insert_query, params = list(new_workspace_id, current_user_id))
+              print(paste0("DEBUG: Granted owner access to workspace ", new_workspace_id))
               
-              # Update user's workspace_id
-              update_user_query <- "UPDATE madi_track.users SET workspace_id = $1 WHERE oauth_unique_id = $2"
-              tryCatch({
-                DBI::dbExecute(conn, update_user_query, params = list(new_workspace_id, current_user_compress))
-                print("DEBUG: Updated user's workspace_id")
+              # Re-query user data to get updated workspace info
+              found_user_data <- tryCatch({
+                DBI::dbGetQuery(conn, sql_query, params = list(current_user_compress))
               }, error = function(e) {
-                warning(paste("Failed to update user workspace:", e$message))
+                warning(paste("Failed to re-query after workspace assignment:", e$message))
+                found_user_data  # Return original data
               })
               
-              # Grant owner access
-              access_insert_query <- "
-                INSERT INTO madi_track.workspace_access (workspace_id, user_email, role)
-                VALUES ($1, $2, 'owner');"
-              
-              tryCatch({
-                DBI::dbExecute(conn, access_insert_query, params = list(new_workspace_id, current_user_id))
-                print(paste0("DEBUG: Granted owner access to workspace ", new_workspace_id))
-                
-                # Re-query user data to get updated workspace info
-                found_user_data <- tryCatch({
-                  DBI::dbGetQuery(conn, sql_query, params = list(current_user_compress))
-                }, error = function(e) {
-                  warning(paste("Failed to re-query after workspace assignment:", e$message))
-                  found_user_data  # Return original data
-                })
-                
-                # Set the current workspace after successful creation
-                if (nrow(found_user_data) > 0 && !is.na(found_user_data$workspace_id[1])) {
-                  print(paste0("DEBUG: Setting workspace after creation: ", found_user_data$workspace_id[1]))
-                  current_workspace(found_user_data$workspace_id[1])
-                }
-              }, error = function(e) {
-                warning(paste("Failed to grant workspace access:", e$message))
-              })
-            }
+              # Set the current workspace after successful creation
+              if (nrow(found_user_data) > 0 && !is.na(found_user_data$workspace_id[1])) {
+                print(paste0("DEBUG: Setting workspace after creation: ", found_user_data$workspace_id[1]))
+                current_workspace(found_user_data$workspace_id[1])
+              }
+            }, error = function(e) {
+              warning(paste("Failed to grant workspace access:", e$message))
+            })
           }
         }
       } else {
