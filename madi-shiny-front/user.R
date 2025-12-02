@@ -62,40 +62,22 @@ auto_register_user <- function(email, name, compressed_id) {
   current_time <- format(Sys.time(), "%Y%m%d_%H%M")
   workspace_name <- paste0(param_username, "_workspace_", current_time)
   
-  # Get the next workspace_id from the sequence or max+1
-  workspace_id_query <- "
-    SELECT COALESCE(MAX(workspace_id), 0) + 1 AS next_id 
-    FROM madi_dat.workspace;"
+  # Let the database sequence generate the workspace_id automatically
+  workspace_insert_query <- "
+    INSERT INTO madi_dat.workspace (category, name, type)
+    VALUES ($1, $2, $3)
+    RETURNING workspace_id;"
   
-  next_workspace_id <- tryCatch({
-    result <- DBI::dbGetQuery(conn, workspace_id_query)
-    as.integer(result$next_id[1])
+  new_workspace_result <- tryCatch({
+    DBI::dbGetQuery(conn, workspace_insert_query, params = list(
+      "Project",   # Using "Project" as category for user workspaces
+      workspace_name,
+      "PW"         # Using "PW" as type (seems to be the standard type)
+    ))
   }, error = function(e) {
-    warning(paste("Failed to get next workspace ID:", e$message))
+    warning(paste("Failed to create workspace for new user:", e$message))
     return(NULL)
   })
-  
-  if (is.null(next_workspace_id) || is.na(next_workspace_id)) {
-    warning("Could not determine next workspace ID")
-    new_workspace_result <- NULL
-  } else {
-    workspace_insert_query <- "
-      INSERT INTO madi_dat.workspace (workspace_id, name, category, type)
-      VALUES ($1, $2, $3, $4)
-      RETURNING workspace_id;"
-    
-    new_workspace_result <- tryCatch({
-      DBI::dbGetQuery(conn, workspace_insert_query, params = list(
-        next_workspace_id,
-        workspace_name,
-        "Project",   # Using "Project" as category for user workspaces
-        "PW"         # Using "PW" as type (seems to be the standard type)
-      ))
-    }, error = function(e) {
-      warning(paste("Failed to create workspace for new user:", e$message))
-      return(NULL)
-    })
-  }
   
   if (is.null(new_workspace_result) || nrow(new_workspace_result) == 0) {
     warning("Failed to create workspace, using fallback")
