@@ -553,9 +553,14 @@ observe({
                                  style = "display: flex; align-items: center; padding: 8px; background-color: #ffffff;",
                                  tags$i(class = "fa fa-upload", style = "color: #e74c3c; margin-right: 10px; font-size: 1.1em;"),
                                  span("Upload to Immport", style = "color: #2c3e50; font-weight: 600;")
+                               ),
+                               div(
+                                 style = "display: flex; align-items: center; padding: 8px; background-color: #ffffff;",
+                                 tags$i(class = "fa fa-database", style = "color: #8e44ad; margin-right: 10px; font-size: 1.1em;"),
+                                 span("Migrate Data for I-SPI", style = "color: #2c3e50; font-weight: 600;")
                                )
                              ),
-                             choiceValues = list("addData", "viewStudy", "manageWorkspaces", "immportUpload"),
+                             choiceValues = list("addData", "viewStudy", "manageWorkspaces", "immportUpload", "migrateData"),
                              selected = "addData"
                 )
               } else {

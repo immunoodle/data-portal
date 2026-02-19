@@ -1,0 +1,239 @@
+
+# =====================================================
+# ISPI MIGRATION: RESULTS (Luminex/MBAA)
+# =====================================================
+
+# -----------------------------------------------------
+# UTILITY: Ensure Analytes Exist
+# -----------------------------------------------------
+ensure_analytes_exist <- function(conn, analytes, workspace_id) {
+  if(length(analytes) == 0) return(TRUE)
+  
+  cat(paste0("[INFO] Checking/Creating ", length(analytes), " analytes...\n"))
+  
+  # Format: antigen|feature
+  count_created <- 0
+  count_failed <- 0
+  
+  for(analyte_str in analytes) {
+    tryCatch({
+      # Helper to parse antigen|feature
+      parts <- strsplit(analyte_str, "\\|")[[1]]
+      antigen <- parts[1]
+      feature <- if(length(parts) > 1) parts[2] else ""
+      
+      # Check if exists
+      exists_query <- "SELECT analyte_accession FROM madi_dat.lk_analyte WHERE analyte_accession = $1"
+      existing <- suppressWarnings(DBI::dbGetQuery(conn, exists_query, params = list(analyte_str)))
+      
+      if(nrow(existing) == 0) {
+        # Use SAVEPOINT to prevent transaction abort on failure
+        suppressWarnings(DBI::dbExecute(conn, paste0("SAVEPOINT analyte_sp_", count_created + count_failed)))
+        
+        tryCatch({
+          insert_query <- "
+            INSERT INTO madi_dat.lk_analyte (
+              analyte_accession, immunology_symbol, official_gene_name,
+              link, gene_symbol
+            ) VALUES ($1, $2, $3, $4, $5)
+          "
+          
+          DBI::dbExecute(conn, insert_query, params = list(
+            analyte_str,          # analyte_accession
+            analyte_str,          # immunology_symbol
+            antigen,              # official_gene_name
+            "Migrated from I-SPI", # link
+            antigen               # gene_symbol
+          ))
+          
+          suppressWarnings(DBI::dbExecute(conn, paste0("RELEASE SAVEPOINT analyte_sp_", count_created + count_failed)))
+          count_created <- count_created + 1
+        }, error = function(e) {
+          # Rollback to savepoint so transaction remains usable
+          tryCatch(
+            suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT analyte_sp_", count_created + count_failed))),
+            error = function(e2) {}
+          )
+          cat(paste0("  [WARN] Failed to insert analyte: ", analyte_str, " - ", e$message, "\n"))
+          count_failed <<- count_failed + 1
+        })
+      }
+    }, error = function(e) {
+      cat(paste0("  [WARN] Failed to check analyte: ", analyte_str, " - ", e$message, "\n"))
+      count_failed <<- count_failed + 1
+    })
+  }
+  
+  cat(paste0("  [OK] Created ", count_created, " new analytes (", count_failed, " failed)\n"))
+  return(TRUE)
+}
+
+# -----------------------------------------------------
+# INSERT MBAA RESULTS (Luminex Specific)
+# -----------------------------------------------------
+insert_mbaa_results_luminex <- function(conn, source_schema, study_acc_source, 
+                                       workspace_id, study_accession, experiment_accession,
+                                       expsample_map, biosample_map,
+                                       result_schema = "MBAA", commit = FALSE,
+                                       source_conn = NULL) {
+  
+  cat("[INFO] Processing MBAA/Luminex Results (Specific Logic)...\n")
+  
+  # Use source_conn for fetching, fall back to conn
+  fetch_conn <- if(!is.null(source_conn) && DBI::dbIsValid(source_conn)) source_conn else conn
+  
+  # 1. Fetch Source Data with JOINs
+  # We need: plate_id, dilution, antibody_mfi, antibody_au
+  # Source: xmap_sample
+  # Note: 'plate_id' and 'dilution' are columns in xmap_sample.
+  
+  cat(paste0("  [INFO] Fetching result data from ", source_schema, ".xmap_sample..."))
+  if(!identical(fetch_conn, conn)) cat(" (using source DB connection)")
+  cat("\n")
+  
+  query <- paste0("
+    SELECT 
+      xmap_sample_id, sampleid, antigen, feature, 
+      dilution, plate_id, antibody_mfi, antibody_au,
+      nominal_sample_dilution
+    FROM ", source_schema, ".xmap_sample 
+    WHERE study_accession = $1
+  ")
+  
+  # Fetch from SOURCE DB
+  results_data <- tryCatch(
+    DBI::dbGetQuery(fetch_conn, query, params = list(study_acc_source)),
+    error = function(e) {
+      cat("  [ERROR] Result fetch failed:", e$message, "\n")
+      return(data.frame())
+    }
+  )
+  
+  cat(paste0("  [INFO] Fetched ", nrow(results_data), " rows from xmap_sample\n"))
+  
+  if(nrow(results_data) == 0) {
+    cat("  [WARN] No result data found in xmap_sample.\n")
+    return(list(success = TRUE, inserted = 0))
+  }
+  
+  # 2. Prepare Analytes
+  # Create list of unique 'antigen|feature'
+  results_data$analyte_acc <- paste0(results_data$antigen, "|", coalesce_str(results_data$feature))
+  unique_analytes <- unique(results_data$analyte_acc)
+  
+  ensure_analytes_exist(conn, unique_analytes, workspace_id)
+  
+  # 3. Insert Results
+  inserted_count <- 0
+  failed_count <- 0
+  skipped_count <- 0
+  
+  # Preview storage
+  preview_rows <- list()
+  
+  cat("  [INFO] Inserting results...\n")
+  
+  # Pre-calc assay_group_id
+  assay_group_id <- experiment_accession
+  
+  # Loop
+  total_rows <- nrow(results_data)
+  prog_step <- max(1, floor(total_rows / 10))
+  
+  for(i in 1:total_rows) {
+    if(i %% prog_step == 0) cat(paste0("    ... processed ", i, "/", total_rows, " rows\n"))
+    
+    row <- results_data[i, ]
+    
+    # Map Source Sample -> Target Expsample
+    sample_id_str <- as.character(row$sampleid)
+    biosample_acc <- biosample_map[[sample_id_str]]
+    
+    if(is.null(biosample_acc)) {
+      skipped_count <- skipped_count + 1
+      next 
+    }
+    
+    expsample_acc <- expsample_map[[biosample_acc]]
+    
+    if(is.null(expsample_acc)) {
+      skipped_count <- skipped_count + 1
+      next 
+    }
+    
+    tryCatch({
+      # Mappings
+      dilution_val <- if(!is.na(row$dilution)) as.character(row$dilution) else "1"
+      plate_val <- if(!is.null(row$plate_id) && !is.na(row$plate_id)) as.character(row$plate_id) else "UnknownPlate"
+      nominal_dilution <- if("nominal_sample_dilution" %in% names(row) && !is.na(row$nominal_sample_dilution)) as.character(row$nominal_sample_dilution) else dilution_val
+      assay_id_val <- paste0(plate_val, "|", nominal_dilution)
+      
+      conc_val <- if(!is.na(row$antibody_au)) as.character(row$antibody_au) else NULL
+      mfi_val <- if(!is.na(row$antibody_mfi)) as.character(row$antibody_mfi) else NULL
+      analyte_val <- row$analyte_acc
+      
+      insert_q <- "
+        INSERT INTO madi_dat.mbaa_result (
+          experiment_accession, study_accession, workspace_id,
+          source_type, source_accession,
+          analyte_accession, analyte_reported,
+          assay_group_id, assay_id,
+          concentration_unit_reported, concentration_value_reported,
+          mfi, mfi_coordinate
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+      "
+      
+      DBI::dbExecute(conn, insert_q, params = list(
+        experiment_accession, study_accession, workspace_id,
+        "EXPSAMPLE", expsample_acc,
+        analyte_val, analyte_val,
+        assay_group_id, assay_id_val,
+        "AU", conc_val,
+        mfi_val, mfi_val
+      ))
+      
+      inserted_count <- inserted_count + 1
+      
+      # Capture Preview (first 10)
+      if(inserted_count <= 10) {
+        preview_rows[[length(preview_rows) + 1]] <- list(
+          SourceSample = sample_id_str,
+          ExpSample = expsample_acc,
+          Analyte = analyte_val,
+          AssayID = assay_id_val,
+          Conc = conc_val,
+          MFI = mfi_val
+        )
+      }
+      
+    }, error = function(e) {
+      failed_count <- failed_count + 1
+    })
+  }
+  
+  if(commit) {
+    cat(paste0("  [OK] COMMITTED: ", inserted_count, " results inserted (", skipped_count, " skipped, ", failed_count, " failed)\n"))
+  } else {
+    cat(paste0("  [ROLLBACK] PROCESSED: ", inserted_count, " results (", skipped_count, " skipped, ", failed_count, " failed) - Test Mode\n"))
+  }
+  
+  # Print Preview Table to Console/Log
+  if(length(preview_rows) > 0) {
+    cat("\n  👀 RESULT PREVIEW (First 10 Rows):\n")
+    cat(sprintf("  %-15s %-20s %-30s %-20s %-10s %-10s\n", "SourceSample", "ExpSample", "Analyte", "AssayID", "Conc", "MFI"))
+    cat("  ------------------------------------------------------------------------------------------------------------------\n")
+    for(r in preview_rows) {
+      cat(sprintf("  %-15s %-20s %-30.30s %-20s %-10s %-10s\n", 
+                  r$SourceSample, r$ExpSample, r$Analyte, r$AssayID, 
+                  coalesce_str(r$Conc), coalesce_str(r$MFI)))
+    }
+    cat("\n")
+  }
+  
+  return(list(success = TRUE, inserted = inserted_count, failed = failed_count, preview = preview_rows))
+}
+
+# Helper
+coalesce_str <- function(x) {
+  ifelse(is.na(x) | x == "", "NA", x)
+}

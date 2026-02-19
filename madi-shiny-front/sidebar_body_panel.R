@@ -215,6 +215,57 @@ observeEvent(input$rb, {
     delete_downstream_tabs("study")
   }
 
+  if(input$rb == "migrateData"){
+    # Remove all existing tabs
+    removeTab(inputId = "body_panel_id", target = "study")
+    removeTab(inputId = "body_panel_id", target = "about_study")
+    removeTab(inputId = "body_panel_id", target = "immportUpload")
+    removeTab(inputId = "body_panel_id", target = "add_users_tab")
+    removeTab(inputId = "body_panel_id", target = "study_personnel")
+    removeTab(inputId = "body_panel_id", target = "program_2_personnel")
+    removeTab(inputId = "body_panel_id", target = "add_personnel_tab")
+    removeTab(inputId = "body_panel_id", target = "addData2Study")
+    removeTab(inputId = "body_panel_id", target = "getBlankTemplatePanel")
+    removeTab(inputId = "body_panel_id", target = "createStudy")
+    removeTab(inputId = "body_panel_id", target = "ArmCohortPanel")
+    removeTab(inputId = "body_panel_id", target = "ConditionDiseasePanel")
+    removeTab(inputId = "body_panel_id", target = "PlannedVisitPanel")
+    removeTab(inputId = "body_panel_id", target = "ExperimentPanel")
+    removeTab(inputId = "body_panel_id", target = "InterventionPanel")
+    removeTab(inputId = "body_panel_id", target = "add_program_tab")
+    removeTab(inputId = "body_panel_id", target = "InclusionExclusionPanel")
+    removeTab(inputId = "body_panel_id", target = "TreatmentPanel")
+    removeTab(inputId = "body_panel_id", target = "ImmuExpoPanel")
+    removeTab(inputId = "body_panel_id", target = "reagentPanel")
+    removeTab(inputId = "body_panel_id", target="standalone.temp.instr")
+    removeTab(inputId = "body_panel_id", target="standalone.temp")
+    removeTab(inputId = "body_panel_id", target="temp.var.std")
+    removeTab(inputId = "body_panel_id", target="primary.temp.instr")
+    removeTab(inputId = "body_panel_id", target="primary.temp")
+    removeTab(inputId = "body_panel_id", target="temp.var.prm")
+    removeTab(inputId = "body_panel_id", target="addAssociated")
+    removeTab(inputId = "body_panel_id", target="showAssociated")
+    removeTab(inputId = "body_panel_id", target="add_workspace_tab")
+    removeTab(inputId = "body_panel_id", target="associated_files")
+    removeTab(inputId = "body_panel_id", target="workspaceManagementTab")
+    removeTab(inputId = "body_panel_id", target="migrationTab")
+
+    # Insert I-SPI migration tab
+    insertTab(inputId = "body_panel_id",
+              tabPanel(value = "migrationTab"
+                       , title = "I-SPI Data Migration"
+                       , uiOutput("migration_ui")
+              ),
+              target = NULL,
+              position = "after"
+    )
+
+    showTab(inputId = "body_panel_id", target = "migrationTab", select = TRUE, session = getDefaultReactiveDomain())
+    rv_data$data <- NULL
+    reset('upload_to_shiny')
+    delete_downstream_tabs("study")
+  }
+
     updateTabsetPanel(session, "body_panel_id",selected = input$rb)
 
     updateRadioButtons(session, "rb_add",

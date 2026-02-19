@@ -11,7 +11,14 @@ library(sqldf)
 library(datamods)
 library(rsconnect)
 library(stringi)
-library(tidyverse)
+library(dplyr)
+library(readr)
+library(stringr)
+library(tibble)
+library(tidyr)
+library(ggplot2)
+library(forcats)
+library(purrr)
 library(shinyFiles)
 library(readxl)
 library(openxlsx)
@@ -26,7 +33,7 @@ library(openssl) # For rand_bytes
 library(jsonlite)
 library(urltools)
 
-Sys.setenv(LOCAL_DEV = "0")
+Sys.setenv(LOCAL_DEV = "1")
 
 # Increased max file upload size
 options(shiny.maxRequestSize = 100*1024^2)
@@ -817,6 +824,10 @@ server <- function(input, output, session) {
       source("workspace_access.R", local = TRUE)
       source("immport_upload_module.R", local = TRUE)
       source("immport_server_logic.R", local = TRUE)
+      source("ispi_migration_controls.R", local = TRUE)
+      source("ispi_migration_results.R", local = TRUE)
+      source("ispi_migration_queries.R", local = TRUE)
+      source("ispi_migration.R", local = TRUE)
 
       # --- USER WORKSPACE FILTERING LOGIC ---
       # Now that user is authenticated, get their workspace and filter studies accordingly
