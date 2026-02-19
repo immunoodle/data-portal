@@ -128,7 +128,7 @@ output$migration_ui <- renderUI({
           wellPanel(
             style = "background-color: #fff3cd; border: 2px solid #ffc107;",
             h4("Destination Mapping", style = "color: #856404; margin-bottom: 15px;"),
-            p("Map I-SPI data to MADI Data Portal structure:", style = "color: #856404;"),
+            p("Map I-SPI data to ImmunoPlex Data Port structure:", style = "color: #856404;"),
             
             fluidRow(
               column(6,
@@ -176,7 +176,7 @@ output$migration_ui <- renderUI({
                 h5(icon("exchange-alt"), " Field Mapping", style = "color: #856404; margin-bottom: 10px;"),
                 div(
                   style = "background-color: #fff8e1; padding: 12px; border-radius: 5px; border: 1px solid #ffe082;",
-                  p(strong("I-SPI"), icon("arrow-right"), strong("MADI Data Portal"), 
+                  p(strong("I-SPI"), icon("arrow-right"), strong("ImmunoPlex Data Port"), 
                     style = "color: #856404; margin-bottom: 8px;"),
                   tags$table(
                     style = "width: 100%; font-size: 0.9em;",

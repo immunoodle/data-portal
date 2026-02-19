@@ -195,6 +195,13 @@ CREATE TABLE IF NOT EXISTS madi_dat.migration_audit_log (
 ALTER TABLE madi_dat.mbaa_result
 ALTER COLUMN assay_id TYPE VARCHAR(250);
 
+-- Widen lk_analyte and mbaa_result analyte_accession to support 'washington_72|Total_IgG'
+ALTER TABLE madi_dat.lk_analyte
+ALTER COLUMN analyte_accession TYPE VARCHAR(100);
+
+ALTER TABLE madi_dat.mbaa_result
+ALTER COLUMN analyte_accession TYPE VARCHAR(100);
+
 -- ============================================================================
 -- 4. APPLY SCHEMA FIX FOR WORKSPACE SEQUENCE (If it hasn't been applied yet)
 -- ============================================================================
