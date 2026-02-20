@@ -2650,7 +2650,7 @@ observeEvent(input$execute_live_confirmed, {
             ),
             tags$tr(style = "border-bottom: 1px solid #dee2e6;",
               tags$td(strong("Control Samples:"), style = "padding: 6px;"),
-              tags$td(paste0(sc(results$controls), " inserted, ", sc(results$controls, "failed"), " failed"), style = "padding: 6px;")
+              tags$td(paste0(sc(results$control_samples), " inserted, ", sc(results$control_samples, "failed"), " failed"), style = "padding: 6px;")
             ),
             tags$tr(style = "border-bottom: 1px solid #dee2e6;",
               tags$td(strong("Control MBAA Results:"), style = "padding: 6px;"),
