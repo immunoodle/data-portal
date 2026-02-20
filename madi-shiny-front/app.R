@@ -41,6 +41,15 @@ options(shiny.maxRequestSize = 100*1024^2)
 # Source database setup functions
 source("database_setup.R", local = FALSE)
 
+# --- Global Python Initialization ---
+# This runs strictly ONCE when the Docker container boots the Shiny app,
+# rather than running for every single user session that connects.
+initialization_script_path <- "R_helpers/initialize_reticulate_python.R"
+if(file.exists(initialization_script_path)) {
+  source(initialization_script_path, local = FALSE)
+  print("DEBUG: Global Python initialization script sourced successfully.")
+}
+
 # Create database connection
 conn <- create_safe_db_connection()
 
@@ -935,13 +944,6 @@ server <- function(input, output, session) {
           current_workspace(NULL)
         }
       }
-
-      initialization_script_path <- "R_helpers/initialize_reticulate_python.R"
-      if(file.exists(initialization_script_path)) {
-        source(initialization_script_path, local = TRUE)
-        print("DEBUG: Python initialization script sourced successfully.")
-      }
-      
       if (!isTRUE(session$userData$ui_update_triggered)) {
         print("DEBUG: Triggering ONE-TIME UI update after authentication")
         session$userData$ui_update_triggered <- TRUE

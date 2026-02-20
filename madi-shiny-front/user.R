@@ -561,7 +561,7 @@ observe({
                                )
                              ),
                              choiceValues = list("addData", "viewStudy", "manageWorkspaces", "immportUpload", "migrateData"),
-                             selected = "addData"
+                             selected = "viewStudy"
                 )
               } else {
                 div(
