@@ -386,7 +386,7 @@ observeEvent(input$immport_zip_upload_button, {
   }
   
   upload_notes_value <- paste(
-    "MADI Data Portal submission -",
+    "ImmunoPlex Data Port submission -",
     "User:", user_context_data$username,
     "| Study:", study_info,
     "| Templates:", length(current_templates),

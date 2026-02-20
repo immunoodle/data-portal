@@ -9,3 +9,7 @@ rsconnect
 archive
 *.Rproj
 .DS_Store
+docker.env
+
+# Antigravity Agent files
+.agent/

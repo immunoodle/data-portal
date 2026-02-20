@@ -11,7 +11,14 @@ library(sqldf)
 library(datamods)
 library(rsconnect)
 library(stringi)
-library(tidyverse)
+library(dplyr)
+library(readr)
+library(stringr)
+library(tibble)
+library(tidyr)
+library(ggplot2)
+library(forcats)
+library(purrr)
 library(shinyFiles)
 library(readxl)
 library(openxlsx)
@@ -33,6 +40,15 @@ options(shiny.maxRequestSize = 100*1024^2)
 
 # Source database setup functions
 source("database_setup.R", local = FALSE)
+
+# --- Global Python Initialization ---
+# This runs strictly ONCE when the Docker container boots the Shiny app,
+# rather than running for every single user session that connects.
+initialization_script_path <- "R_helpers/initialize_reticulate_python.R"
+if(file.exists(initialization_script_path)) {
+  source(initialization_script_path, local = FALSE)
+  print("DEBUG: Global Python initialization script sourced successfully.")
+}
 
 # Create database connection
 conn <- create_safe_db_connection()
@@ -84,12 +100,12 @@ authenticated_body_content <- function() {
 header <- dashboardHeader(
   tags$li(
     a(
-      img(src = 'apple-touch-icon.png', title = "MADI Logo", height = "30px"),
+      img(src = 'data_port.png', title = "ImmunoPlex Logo", height = "30px"),
       style = "padding-top:10px; padding-bottom:10px;"
     ),
     class = "dropdown"
   ),
-  title = "MADI Data Portal"
+  title = "ImmunoPlex Data Port"
 )
 
 sidebar <- dashboardSidebar(
@@ -325,12 +341,70 @@ ui <- tagList(
         window.addEventListener('touchmove', resetTimer, {passive: true});
         resetTimer();
       })();
+    ")),
+    tags$style(HTML("
+      /* Logo/Header Overrides */
+      .skin-black .main-header .logo {
+        background-color: #FFFFFF;
+        color: #1E293B;
+        border-bottom: 0 solid transparent;
+        border-right: 1px solid #E2E8F0;
+      }
+      .skin-black .main-header .logo:hover {
+        background-color: #F8FAFC;
+      }
+      .skin-black .main-header .navbar {
+        background-color: #FFFFFF;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+      }
+      .skin-black .main-header .navbar .sidebar-toggle {
+        color: #64748B;
+      }
+      .skin-black .main-header .navbar .sidebar-toggle:hover {
+        background-color: #F1F5F9;
+        color: #0F172A;
+      }
+
+      /* Sidebar Overrides - Sleek Dark Slate */
+      .skin-black .main-sidebar {
+        background-color: #1E293B;
+      }
+      .skin-black .sidebar-menu > li.active > a,
+      .skin-black .sidebar-menu > li:hover > a {
+        background-color: #0F172A;
+        color: #FFFFFF;
+        border-left-color: #E8622A; /* ImmunoPlex Orange Accent */
+      }
+      .skin-black .sidebar a {
+        color: #CBD5E1;
+      }
+      .skin-black .sidebar-menu > li > a > .fa,
+      .skin-black .sidebar-menu > li > a > .glyphicon,
+      .skin-black .sidebar-menu > li > a > .ion {
+        color: #94A3B8;
+      }
+      .skin-black .sidebar-menu > li.active > a > .fa,
+      .skin-black .sidebar-menu > li:hover > a > .fa,
+      .skin-black .sidebar-menu > li.active > a > .glyphicon,
+      .skin-black .sidebar-menu > li:hover > a > .glyphicon {
+        color: #E8622A;
+      }
+
+      /* Sidebar User Panel text */
+      .skin-black .user-panel > .info, .skin-black .user-panel > .info > a {
+        color: #F8FAFC;
+      }
+
+      /* Body background */
+      .content-wrapper, .right-side {
+        background-color: #F8FAFC; /* Softer, sleek modern background */
+      }
     "))
   ),
 
   dashboardPage(
-    title = "xMap Reader",
-    skin = "green",
+    title = "ImmunoPlex Data Port",
+    skin = "black",
     header = header,
     sidebar = sidebar,
     body = body
@@ -817,6 +891,10 @@ server <- function(input, output, session) {
       source("workspace_access.R", local = TRUE)
       source("immport_upload_module.R", local = TRUE)
       source("immport_server_logic.R", local = TRUE)
+      source("ispi_migration_controls.R", local = TRUE)
+      source("ispi_migration_results.R", local = TRUE)
+      source("ispi_migration_queries.R", local = TRUE)
+      source("ispi_migration.R", local = TRUE)
 
       # --- USER WORKSPACE FILTERING LOGIC ---
       # Now that user is authenticated, get their workspace and filter studies accordingly
@@ -866,13 +944,6 @@ server <- function(input, output, session) {
           current_workspace(NULL)
         }
       }
-
-      initialization_script_path <- "R_helpers/initialize_reticulate_python.R"
-      if(file.exists(initialization_script_path)) {
-        source(initialization_script_path, local = TRUE)
-        print("DEBUG: Python initialization script sourced successfully.")
-      }
-      
       if (!isTRUE(session$userData$ui_update_triggered)) {
         print("DEBUG: Triggering ONE-TIME UI update after authentication")
         session$userData$ui_update_triggered <- TRUE

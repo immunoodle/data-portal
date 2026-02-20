@@ -9,7 +9,10 @@ if (!require(jsonlite)) install.packages("jsonlite")
 
 # --- Configuration (Load from Environment Variables or Secure Source) ---
 # Check if we're in local dev mode
-IS_LOCAL_DEV <- Sys.getenv("LOCAL_DEV", unset = "0") == "1"
+LOCAL_DEV_RAW <- Sys.getenv("LOCAL_DEV", unset = "0")
+cat("🔍 [DEBUG] LOCAL_DEV environment variable raw value: '", LOCAL_DEV_RAW, "'\n", sep="")
+IS_LOCAL_DEV <- LOCAL_DEV_RAW == "1"
+cat("🔍 [DEBUG] IS_LOCAL_DEV evaluated to:", IS_LOCAL_DEV, "\n")
 
 DEX_ISSUER <- Sys.getenv("DEX_ISSUER")
 DEX_CLIENT_ID <- Sys.getenv("DEX_CLIENT_ID")
