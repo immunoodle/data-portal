@@ -33,7 +33,7 @@ library(openssl) # For rand_bytes
 library(jsonlite)
 library(urltools)
 
-Sys.setenv(LOCAL_DEV = "1")
+Sys.setenv(LOCAL_DEV = "0")
 
 # Increased max file upload size
 options(shiny.maxRequestSize = 100*1024^2)
