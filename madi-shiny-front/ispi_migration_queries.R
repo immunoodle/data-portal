@@ -415,11 +415,7 @@ insert_subjects <- function(conn, source_data, workspace_id, subject_prefix = "S
     return(list(success = TRUE, inserted = 0, existing = 0, failed = list()))
   }
   
-  # Start transaction
-  if(!commit) {
-    DBI::dbExecute(conn, "BEGIN")
-    cat("[INFO] Transaction started (TEST MODE - will rollback)\n")
-  }
+  # NOTE: No transaction management - always called inside global execute_migration transaction
   
   tryCatch({
     inserted_count <- 0
@@ -525,13 +521,7 @@ insert_subjects <- function(conn, source_data, workspace_id, subject_prefix = "S
       })
     }
     
-    if(commit) {
-      DBI::dbExecute(conn, "COMMIT")
-      cat("[OK] COMMITTED: Inserted", inserted_count, "subjects,", existing_count, "already existed,", length(failed_items), "failed\n")
-    } else {
-      DBI::dbExecute(conn, "ROLLBACK")
-      cat("[ROLLBACK] ROLLED BACK: Would have inserted", inserted_count, "subjects,", existing_count, "already existed,", length(failed_items), "would fail\n")
-    }
+    cat("[OK] Subjects processed (in global transaction):", inserted_count, "inserted,", existing_count, "existing,", length(failed_items), "failed\n")
     
     return(list(
       success = TRUE, 
@@ -541,9 +531,7 @@ insert_subjects <- function(conn, source_data, workspace_id, subject_prefix = "S
     ))
     
   }, error = function(e) {
-    DBI::dbExecute(conn, "ROLLBACK")
-    cat("[ERROR] ERROR:", e$message, "\n")
-    cat("[ROLLBACK] Transaction rolled back\n")
+    cat("[ERROR] ERROR in insert_subjects:", e$message, "\n")
     return(list(success = FALSE, error = e$message, failed = list()))
   })
 }
@@ -941,14 +929,8 @@ insert_experiment_samples <- function(conn, source_data, timeperiod_mapping, wor
       })
     }
     
-    if(commit) {
-      DBI::dbExecute(conn, "COMMIT")
-      cat("[OK] COMMITTED: Created", inserted_count, "samples,", existing_count, "already existed,", 
-          length(failed_items), "failed,", length(skipped_unmapped), "skipped (unmapped)\n")
-    } else {
-      cat("[ROLLBACK] Would rollback:", inserted_count, "samples,", 
-          length(failed_items), "would fail,", length(skipped_unmapped), "would skip (unmapped)\n")
-    }
+    cat("[OK] Expsamples processed (in global transaction):", inserted_count, "inserted,", existing_count, "existing,",
+        length(failed_items), "failed,", length(skipped_unmapped), "skipped (unmapped)\n")
     
     # BEFORE rollback/commit: do biosample linking (if biosample_map provided)
     biosample_link_result <- list(success = TRUE, linked = 0, failed = list())
