@@ -257,7 +257,10 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
       next  # Skip samples with unmapped timeperiods
     }
     
+    sp_name <- paste0("bio_sp_", i)
     tryCatch({
+      suppressWarnings(DBI::dbExecute(conn, paste0("SAVEPOINT ", sp_name)))
+
       # Check if biosample already exists for this subject+planned_visit
       existing <- DBI::dbGetQuery(conn,
         "SELECT biosample_accession FROM madi_dat.biosample 
@@ -284,7 +287,6 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
         }
       } else {
         # Biosample doesn't exist - create new
-        # Generate unique biosample accession using pattern from SQL
         subject_num <- gsub("SUB", "", row$subject_accession)
         timeperiod_short <- substr(row$timeperiod, 1, 3)
         biosample_acc <- sprintf("BS%s%s_%d", subject_num, timeperiod_short, i)
@@ -321,10 +323,16 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
       
       # Track biosample for this sample
       biosample_map[[as.character(row$sampleid)]] <- biosample_acc
+
+      suppressWarnings(DBI::dbExecute(conn, paste0("RELEASE SAVEPOINT ", sp_name)))
       
     }, error = function(e) {
+      tryCatch(
+        suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT ", sp_name))),
+        error = function(e2) {}
+      )
       cat("  [ERROR] Failed biosample for sample", row$sampleid, ":", e$message, "\n")
-      failed_biosamples[[length(failed_biosamples) + 1]] <- list(
+      failed_biosamples[[length(failed_biosamples) + 1]] <<- list(
         sampleid = row$sampleid,
         error = e$message
       )
@@ -360,7 +368,10 @@ link_expsample_biosample_internal <- function(conn, biosample_map, sample_prefix
     biosample_acc <- biosample_map[[sampleid]]
     expsample_acc <- paste0(sample_prefix, sampleid)
     
+    sp_name <- paste0("link_sp_", gsub("[^[:alnum:]]", "_", sampleid))
     tryCatch({
+      suppressWarnings(DBI::dbExecute(conn, paste0("SAVEPOINT ", sp_name)))
+
       DBI::dbExecute(conn,
         "INSERT INTO madi_dat.expsample_2_biosample (
            expsample_accession, biosample_accession
@@ -369,6 +380,7 @@ link_expsample_biosample_internal <- function(conn, biosample_map, sample_prefix
         params = list(expsample_acc, biosample_acc)
       )
       
+      suppressWarnings(DBI::dbExecute(conn, paste0("RELEASE SAVEPOINT ", sp_name)))
       linked_count <- linked_count + 1
       if(linked_count <= 3) {
         cat("  [OK] Linked", expsample_acc, "→", biosample_acc, "\n")
@@ -377,8 +389,12 @@ link_expsample_biosample_internal <- function(conn, biosample_map, sample_prefix
       }
       
     }, error = function(e) {
+      tryCatch(
+        suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT ", sp_name))),
+        error = function(e2) {}
+      )
       cat("  [ERROR] Failed to link", expsample_acc, ":", e$message, "\n")
-      failed_links[[length(failed_links) + 1]] <- list(
+      failed_links[[length(failed_links) + 1]] <<- list(
         sampleid = sampleid,
         expsample_acc = expsample_acc,
         biosample_acc = biosample_acc,
