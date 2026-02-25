@@ -161,17 +161,19 @@ insert_mbaa_results_luminex <- function(conn, source_schema, study_acc_source,
       next 
     }
     
+    sp_name <- paste0("mbaa_row_", i)
     tryCatch({
-      # Mappings
+      suppressWarnings(DBI::dbExecute(conn, paste0("SAVEPOINT ", sp_name)))
+
+      # Per-row value computations
       dilution_val <- if(!is.na(row$dilution)) as.character(row$dilution) else "1"
       plate_val <- if(!is.null(row$plate_id) && !is.na(row$plate_id)) as.character(row$plate_id) else "UnknownPlate"
       nominal_dilution <- if("nominal_sample_dilution" %in% names(row) && !is.na(row$nominal_sample_dilution)) as.character(row$nominal_sample_dilution) else dilution_val
       assay_id_val <- paste0(plate_val, "|", nominal_dilution)
-      
       conc_val <- if(!is.na(row$antibody_au)) as.character(row$antibody_au) else NULL
       mfi_val <- if(!is.na(row$antibody_mfi)) as.character(row$antibody_mfi) else NULL
       analyte_val <- row$analyte_acc
-      
+
       insert_q <- "
         INSERT INTO madi_dat.mbaa_result (
           experiment_accession, study_accession, workspace_id,
@@ -182,7 +184,7 @@ insert_mbaa_results_luminex <- function(conn, source_schema, study_acc_source,
           mfi, mfi_coordinate
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       "
-      
+
       DBI::dbExecute(conn, insert_q, params = list(
         experiment_accession, study_accession, workspace_id,
         "EXPSAMPLE", expsample_acc,
@@ -191,9 +193,10 @@ insert_mbaa_results_luminex <- function(conn, source_schema, study_acc_source,
         "AU", conc_val,
         mfi_val, mfi_val
       ))
-      
+
+      suppressWarnings(DBI::dbExecute(conn, paste0("RELEASE SAVEPOINT ", sp_name)))
       inserted_count <- inserted_count + 1
-      
+
       # Capture Preview (first 10)
       if(inserted_count <= 10) {
         preview_rows[[length(preview_rows) + 1]] <- list(
@@ -205,9 +208,13 @@ insert_mbaa_results_luminex <- function(conn, source_schema, study_acc_source,
           MFI = mfi_val
         )
       }
-      
+
     }, error = function(e) {
-      failed_count <- failed_count + 1
+      tryCatch(
+        suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT ", sp_name))),
+        error = function(e2) {}
+      )
+      failed_count <<- failed_count + 1
     })
   }
   
