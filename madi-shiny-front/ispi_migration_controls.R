@@ -84,8 +84,9 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
       }, error = function(e) {
         tryCatch(suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT ", sp_name))), error = function(e2) {})
         failed_items[[length(failed_items) + 1]] <<- list(id = paste0("posc", control_data[i, "xmap_control_id"], "_", experiment_accession), error = e$message)
-        if(length(failed_items) <= 3) cat("  [ERROR] Control", i, "failed:", e$message, "\n")
+        if(length(failed_items) <= 10) message("  [ERROR] Control ", i, " failed: ", e$message)
       })
+      if(i %% 200 == 0) message(sprintf("  [INFO] Processed %d / %d controls (Failed: %d)", i, nrow(control_data), length(failed_items)))
     }
   }
   
@@ -102,8 +103,9 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
       }, error = function(e) {
         tryCatch(suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT ", sp_name))), error = function(e2) {})
         failed_items[[length(failed_items) + 1]] <<- list(id = paste0("blank", buffer_data[i, "xmap_buffer_id"], "_", experiment_accession), error = e$message)
-        if(length(failed_items) <= 3) cat("  [ERROR] Buffer", i, "failed:", e$message, "\n")
+        if(length(failed_items) <= 10) message("  [ERROR] Buffer ", i, " failed: ", e$message)
       })
+      if(i %% 200 == 0) message(sprintf("  [INFO] Processed %d / %d buffers (Failed: %d)", i, nrow(buffer_data), length(failed_items)))
     }
   }
   
@@ -120,8 +122,9 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
       }, error = function(e) {
         tryCatch(suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT ", sp_name))), error = function(e2) {})
         failed_items[[length(failed_items) + 1]] <<- list(id = paste0("stand", standard_data[i, "xmap_standard_id"], "_", experiment_accession), error = e$message)
-        if(length(failed_items) <= 3) cat("  [ERROR] Standard", i, "failed:", e$message, "\n")
+        if(length(failed_items) <= 10) message("  [ERROR] Standard ", i, " failed: ", e$message)
       })
+      if(i %% 200 == 0) message(sprintf("  [INFO] Processed %d / %d standards (Failed: %d)", i, nrow(standard_data), length(failed_items)))
     }
   }
   
@@ -261,8 +264,9 @@ insert_control_results <- function(conn, control_data, buffer_data, standard_dat
       }, error = function(e) {
         tryCatch(suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT ", sp_name))), error = function(e2) {})
         failed_count <<- failed_count + 1
-        if(failed_count <= 3) cat("  [ERROR]", label, i, "result failed:", e$message, "\n")
+        if(failed_count <= 10) message("  [ERROR] ", label, " MBAA result ", i, " failed: ", e$message)
       })
+      if(i %% 200 == 0) message(sprintf("  [INFO] Processed %d / %d %s MBAA results (Failed: %d)", i, nrow(data), label, failed_count))
     }
   }
   
