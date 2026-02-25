@@ -2034,7 +2034,7 @@ observeEvent(input$execute_test_migration, {
 
   # Execute TEST migration using withProgress for live step updates
 
-  migration_log <- NULL
+  migration_log_content <- NULL
   source_conn <- NULL
   tryCatch({
     # Create source DB connection using env vars
@@ -2058,7 +2058,7 @@ observeEvent(input$execute_test_migration, {
         )
       }
       
-      migration_log <<- capture.output({
+      migration_log_content <<- capture.output({
         results <<- execute_migration(
           conn, preview_data_with_mappings, config,
           commit = FALSE, source_conn = source_conn,
@@ -2068,7 +2068,7 @@ observeEvent(input$execute_test_migration, {
     })
     
     # Store log for download
-    migration_log_text(paste(migration_log, collapse = "\n"))
+    migration_log_text(paste(migration_log_content, collapse = "\n"))
     
     removeModal()
     
