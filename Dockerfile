@@ -42,7 +42,10 @@ RUN R -e 'install.packages(c("jose"))'
 RUN R -e "install.packages(c('httr2', 'jose', 'openssl', 'jsonlite', 'urltools', 'httr'))"
 RUN R -e "install.packages(c('strex', 'purrr'))"
 
-# Set the working directory
+# Copy the custom shiny-server configuration file
+COPY shiny-server.conf /etc/shiny-server/shiny-server.conf
+
+# Set the working directory to the Shiny Server app hosting directory
 WORKDIR /srv/shiny-server/
 
 # Copy your entire project into the container
@@ -51,9 +54,6 @@ COPY . .
 # Set correct file permissions for the shiny user
 RUN chown -R shiny:shiny /srv/shiny-server
 
-# Tell Docker to expose the Shiny port
-EXPOSE 3838
-
-# --- CRITICAL FIX ---
-# Tell R to run the app from the 'madi-shiny-front' subdirectory
-CMD ["R", "-e", "shiny::runApp('madi-shiny-front', host='0.0.0.0', port=3838)"]
+# We DO NOT define EXPOSE or CMD here.
+# By omitting CMD, Docker defaults to the rocker/shiny-verse base image's entrypoint,
+# which automatically launches the multi-process shiny-server architecture on port 3838.
