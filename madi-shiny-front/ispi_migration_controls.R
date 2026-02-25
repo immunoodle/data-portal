@@ -82,8 +82,7 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         if(res$status == "inserted") inserted_count <- inserted_count + 1
         else existing_count <- existing_count + 1
       }, error = function(e) {
-        err_msg <- sprintf("%s | ExpAccLen:%d, GrpIdLen:%d", 
-                           e$message, nchar(experiment_accession), nchar(assay_group_id))
+        err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
         failed_items[[length(failed_items) + 1]] <<- list(id = paste0("posc", control_data[i, "xmap_control_id"], "_", experiment_accession), error = err_msg)
         if(length(failed_items) <= 10) message("  [ERROR] Control ", i, " failed: ", err_msg)
       })
@@ -102,8 +101,7 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         if(res$status == "inserted") inserted_count <- inserted_count + 1
         else existing_count <- existing_count + 1
       }, error = function(e) {
-        err_msg <- sprintf("%s | ExpAccLen:%d, GrpIdLen:%d", 
-                           e$message, nchar(experiment_accession), nchar(assay_group_id))
+        err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
         failed_items[[length(failed_items) + 1]] <<- list(id = paste0("blank", buffer_data[i, "xmap_buffer_id"], "_", experiment_accession), error = err_msg)
         if(length(failed_items) <= 10) message("  [ERROR] Buffer ", i, " failed: ", err_msg)
       })
@@ -122,8 +120,7 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         if(res$status == "inserted") inserted_count <- inserted_count + 1
         else existing_count <- existing_count + 1
       }, error = function(e) {
-        err_msg <- sprintf("%s | ExpAccLen:%d, GrpIdLen:%d", 
-                           e$message, nchar(experiment_accession), nchar(assay_group_id))
+        err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
         failed_items[[length(failed_items) + 1]] <<- list(id = paste0("stand", standard_data[i, "xmap_standard_id"], "_", experiment_accession), error = err_msg)
         if(length(failed_items) <= 10) message("  [ERROR] Standard ", i, " failed: ", err_msg)
       })
