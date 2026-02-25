@@ -2031,24 +2031,9 @@ observeEvent(input$execute_test_migration, {
     ispi_project_id = input$ispi_project_id
   )
   
-  # Show processing modal
-  showModal(modalDialog(
-    title = "Migration In Progress",
-    div(
-      style = "text-align: center; padding: 30px;",
-      tags$div(class = "fa fa-spinner fa-spin", style = "font-size: 48px; color: #8e44ad; margin-bottom: 20px;"),
-      h4("Running TEST Migration...", style = "color: #8e44ad;"),
-      p("Processing data and validating migration. All changes will be rolled back.", 
-        style = "color: #666; font-size: 0.95em;"),
-      p("This may take several minutes for large datasets. Please do not close this window.",
-        style = "color: #999; font-size: 0.85em; font-style: italic;")
-    ),
-    footer = NULL,
-    easyClose = FALSE,
-    size = "m"
-  ))
-  
-  # Execute TEST migration (capture console output for download)
+
+  # Execute TEST migration using withProgress for live step updates
+
   migration_log <- NULL
   source_conn <- NULL
   tryCatch({
@@ -2060,8 +2045,26 @@ observeEvent(input$execute_test_migration, {
       NULL
     })
     
-    migration_log <- capture.output({
-      results <- execute_migration(conn, preview_data_with_mappings, config, commit = FALSE, source_conn = source_conn)
+    withProgress(message = "⏳ Running TEST Migration", value = 0, {
+      step_num <- 0
+      total_steps <- 9
+      
+      progress_cb <- function(msg, detail = "") {
+        step_num <<- step_num + 1
+        incProgress(
+          amount = 1 / total_steps,
+          message = msg,
+          detail = detail
+        )
+      }
+      
+      migration_log <<- capture.output({
+        results <<- execute_migration(
+          conn, preview_data_with_mappings, config,
+          commit = FALSE, source_conn = source_conn,
+          progress_cb = progress_cb
+        )
+      })
     })
     
     # Store log for download
@@ -2490,24 +2493,7 @@ observeEvent(input$execute_live_confirmed, {
     operator_designation = operator_designation
   )
   
-  # Show processing modal
-  showModal(modalDialog(
-    title = "Migration In Progress",
-    div(
-      style = "text-align: center; padding: 30px;",
-      tags$div(class = "fa fa-spinner fa-spin", style = "font-size: 48px; color: #e74c3c; margin-bottom: 20px;"),
-      h4("Executing LIVE Migration...", style = "color: #e74c3c;"),
-      p("Processing data and committing changes to the database.", 
-        style = "color: #666; font-size: 0.95em;"),
-      p("This may take several minutes for large datasets. Please do not close this window.",
-        style = "color: #999; font-size: 0.85em; font-style: italic;")
-    ),
-    footer = NULL,
-    easyClose = FALSE,
-    size = "m"
-  ))
-  
-  # Execute LIVE migration
+  # Execute LIVE migration with live step progress
   
   # In-memory log capture for download (no disk file)
   log_con <- textConnection("live_log_lines", "w", local = FALSE)
@@ -2530,7 +2516,25 @@ observeEvent(input$execute_live_confirmed, {
       NULL
     })
     
-    results <- execute_migration(conn, preview_data_with_mappings, config, commit = TRUE, source_conn = source_conn)
+    withProgress(message = "🔴 Executing LIVE Migration", value = 0, {
+      step_num <- 0
+      total_steps <- 9
+      
+      progress_cb <- function(msg, detail = "") {
+        step_num <<- step_num + 1
+        incProgress(
+          amount = 1 / total_steps,
+          message = msg,
+          detail = detail
+        )
+      }
+      
+      results <<- execute_migration(
+        conn, preview_data_with_mappings, config,
+        commit = TRUE, source_conn = source_conn,
+        progress_cb = progress_cb
+      )
+    })
     
     removeModal()
     

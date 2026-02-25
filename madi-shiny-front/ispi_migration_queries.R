@@ -978,7 +978,7 @@ insert_experiment_samples <- function(conn, source_data, timeperiod_mapping, wor
 # MASTER FUNCTION: Execute Full Migration
 # =====================================================
 # Orchestrates all migration steps in correct order
-execute_migration <- function(conn, source_data, config, commit = FALSE, source_conn = NULL) {
+execute_migration <- function(conn, source_data, config, commit = FALSE, source_conn = NULL, progress_cb = NULL) {
   
   cat("═══════════════════════════════════════════════════\n")
   cat("[INFO] STARTING I-SPI MIGRATION\n")
@@ -986,16 +986,23 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   cat("═══════════════════════════════════════════════════\n\n")
   
   results <- list()
+  
+  # Helper: call progress callback safely
+  pcb <- function(message, detail = "") {
+    if(!is.null(progress_cb)) tryCatch(progress_cb(message, detail), error = function(e) {})
+  }
 
   # Start Global Transaction for ALL modes
   # Test mode: ROLLBACK at end. Live mode: COMMIT at end.
   cat("\n[INFO] GLOBAL MIGRATION TRANSACTION STARTED\n")
+  pcb("Starting migration...", "Opening database transaction")
   DBI::dbExecute(conn, "BEGIN")
   
   tryCatch({
   
   # Step 0: Validate or Create Experiment
   cat("\n--- STEP 0: VALIDATE/CREATE EXPERIMENT ---\n")
+  pcb("Step 1/9: Validating Experiment", paste("Checking", config$experiment_accession))
   results$experiment <- validate_or_create_experiment(
     conn, config$experiment_accession, config$study_accession,
     config$workspace_id, config$create_new_experiment %||% FALSE, 
@@ -1010,6 +1017,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   
   # Step 1: Validate Subjects Exist in Target Database
   cat("\n--- STEP 1: VALIDATE SUBJECTS EXIST ---\n")
+  pcb("Step 2/9: Validating Subjects", paste("Checking", length(unique(source_data$patientid)), "patients"))
   results$subjects <- validate_existing_subjects(
     conn, source_data, 
     config$workspace_id,
@@ -1023,6 +1031,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   
   # Step 2: Create Planned Visits (if needed)
   cat("\n--- STEP 2: CREATE PLANNED VISITS ---\n")
+  pcb("Step 3/9: Planned Visits", "Creating any new planned visits")
   new_pv_values <- names(config$timeperiod_mapping)[config$timeperiod_mapping == "NEW"]
   if(length(new_pv_values) > 0) {
     results$planned_visits <- create_planned_visits(
@@ -1049,6 +1058,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   
   # Step 2B: Insert Biosamples
   cat("\nStep 2B: Processing biosamples...\n")
+  pcb("Step 4/9: Biosamples", paste("Processing", nrow(source_data), "source rows"))
   results$biosamples <- insert_biosamples(
     conn, source_data,
     config$workspace_id, config$study_accession,
@@ -1063,6 +1073,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   
   # Step 5: Insert Experiment Samples (and link to biosamples)
   cat("\nStep 5: Creating experiment samples & linking to biosamples...\n")
+  pcb("Step 5/9: Experiment Samples", paste("Inserting", nrow(source_data), "samples"))
   results$expsamples <- insert_experiment_samples(
     conn, source_data, config$timeperiod_mapping,
     config$workspace_id, config$study_accession, config$experiment_accession,
@@ -1081,6 +1092,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   # Step 6: Insert MBAA Results (if applicable)
   # This uses the mapping from Step 5 to link results to created experiment samples
   cat("\n--- STEP 6: INSERT RESULTS ---\n")
+  pcb("Step 6/9: MBAA Results", paste("Inserting assay results (this is the longest step)"))
   if(!is.null(config$result_schema) && config$result_schema == "MBAA") {
     results$mbaa_results <- insert_mbaa_results(
       conn, source_data, results$expsamples$sample_mapping,
@@ -1097,6 +1109,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   
   # Step 3: Create Arms (if needed)
   cat("\n--- STEP 3: CREATE ARMS/COHORTS ---\n")
+  pcb("Step 7/9: Arms & Cohorts", "Creating arm/cohort associations")
   new_arm_values <- names(config$agroup_mapping)[config$agroup_mapping == "NEW"]
   if(length(new_arm_values) > 0) {
     results$arms <- create_arms(
@@ -1118,6 +1131,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   
   # Step 4: Insert Arm-Subject Associations
   cat("\n--- STEP 4: INSERT ARM-SUBJECT ASSOCIATIONS ---\n")
+  pcb("Step 8/9: Arm—Subject Links", "Linking subjects to their arms")
   results$arm_associations <- insert_arm_subject_associations(
     conn, source_data, config$agroup_mapping,
     config$workspace_id, config$study_accession,
@@ -1225,6 +1239,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
                  nrow(std_data), " standards, ", nrow(sc_data), " standard curves\n"))
       
       # 2. Insert Control Samples from all 3 tables (INSERT to TARGET via conn)
+      pcb("Step 9/9: Controls & Standards", paste("Inserting", nrow(ctrl_data), "controls,", nrow(buff_data), "blanks,", nrow(std_data), "standards"))
       results$control_samples <- insert_control_samples(
         conn, ctrl_data, buff_data, std_data,
         config$workspace_id, study_acc_target, config$experiment_accession,
