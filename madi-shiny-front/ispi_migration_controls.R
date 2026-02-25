@@ -21,11 +21,12 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
   # Helper to process a single control/buffer/standard row
   # type: "control", "blank", or "standard"
   process_control_row <- function(row, type) {
-    # Generate accession based on type
+    # Generate accession safely under 15 characters for MADI PROD limits
+    # xmap id is globally unique across ISPI schema.
     prefix <- switch(type,
-      "control" = "posc",
-      "blank"   = "blank",
-      "standard" = "stand"
+      "control" = "cs_",
+      "blank"   = "cb_",
+      "standard" = "st_"
     )
     id_col <- switch(type,
       "control" = "xmap_control_id",
@@ -33,7 +34,9 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
       "standard" = "xmap_standard_id"
     )
     source_id <- as.character(row[[id_col]])[1]
-    acc <- paste0(prefix, source_id, "_", experiment_accession)
+    
+    # "cs_123456" = 9 chars (safely under 15)
+    acc <- paste0(prefix, source_id)
     
     # Check if exists
     exists_query <- "SELECT control_sample_accession FROM madi_dat.control_sample WHERE control_sample_accession = $1"
@@ -82,9 +85,10 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         if(res$status == "inserted") inserted_count <- inserted_count + 1
         else existing_count <- existing_count + 1
       }, error = function(e) {
+        acc <- paste0("cs_", control_data[i, "xmap_control_id"])
         err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
-        failed_items[[length(failed_items) + 1]] <<- list(id = paste0("posc", control_data[i, "xmap_control_id"], "_", experiment_accession), error = err_msg)
-        if(length(failed_items) <= 10) message("  [ERROR] Control ", i, " failed: ", err_msg)
+        failed_items[[length(failed_items) + 1]] <<- list(id = acc, error = err_msg)
+        if(length(failed_items) <= 10) message("  [ERROR] Control ", acc, " failed: ", err_msg)
       })
       if(i %% 200 == 0) message(sprintf("  [INFO] Processed %d / %d controls (Failed: %d)", i, nrow(control_data), length(failed_items)))
     }
@@ -101,9 +105,10 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         if(res$status == "inserted") inserted_count <- inserted_count + 1
         else existing_count <- existing_count + 1
       }, error = function(e) {
+        acc <- paste0("cb_", buffer_data[i, "xmap_buffer_id"])
         err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
-        failed_items[[length(failed_items) + 1]] <<- list(id = paste0("blank", buffer_data[i, "xmap_buffer_id"], "_", experiment_accession), error = err_msg)
-        if(length(failed_items) <= 10) message("  [ERROR] Buffer ", i, " failed: ", err_msg)
+        failed_items[[length(failed_items) + 1]] <<- list(id = acc, error = err_msg)
+        if(length(failed_items) <= 10) message("  [ERROR] Buffer ", acc, " failed: ", err_msg)
       })
       if(i %% 200 == 0) message(sprintf("  [INFO] Processed %d / %d buffers (Failed: %d)", i, nrow(buffer_data), length(failed_items)))
     }
@@ -120,9 +125,10 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         if(res$status == "inserted") inserted_count <- inserted_count + 1
         else existing_count <- existing_count + 1
       }, error = function(e) {
+        acc <- paste0("st_", standard_data[i, "xmap_standard_id"])
         err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
-        failed_items[[length(failed_items) + 1]] <<- list(id = paste0("stand", standard_data[i, "xmap_standard_id"], "_", experiment_accession), error = err_msg)
-        if(length(failed_items) <= 10) message("  [ERROR] Standard ", i, " failed: ", err_msg)
+        failed_items[[length(failed_items) + 1]] <<- list(id = acc, error = err_msg)
+        if(length(failed_items) <= 10) message("  [ERROR] Standard ", acc, " failed: ", err_msg)
       })
       if(i %% 200 == 0) message(sprintf("  [INFO] Processed %d / %d standards (Failed: %d)", i, nrow(standard_data), length(failed_items)))
     }
