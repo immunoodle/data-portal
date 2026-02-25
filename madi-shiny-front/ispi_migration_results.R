@@ -27,8 +27,10 @@ ensure_analytes_exist <- function(conn, analytes, workspace_id) {
       existing <- suppressWarnings(DBI::dbGetQuery(conn, exists_query, params = list(analyte_str)))
       
       if(nrow(existing) == 0) {
-        # Use SAVEPOINT to prevent transaction abort on failure
-        suppressWarnings(DBI::dbExecute(conn, paste0("SAVEPOINT analyte_sp_", count_created + count_failed)))
+        # Use a FIXED savepoint name ("analyte_sp") to avoid accumulating lock entries
+        # in PostgreSQL's shared memory when looping over many analytes.
+        # Using a unique name per analyte causes "out of shared memory" errors.
+        suppressWarnings(DBI::dbExecute(conn, "SAVEPOINT analyte_sp"))
         
         tryCatch({
           insert_query <- "
@@ -46,12 +48,12 @@ ensure_analytes_exist <- function(conn, analytes, workspace_id) {
             antigen               # gene_symbol
           ))
           
-          suppressWarnings(DBI::dbExecute(conn, paste0("RELEASE SAVEPOINT analyte_sp_", count_created + count_failed)))
+          suppressWarnings(DBI::dbExecute(conn, "RELEASE SAVEPOINT analyte_sp"))
           count_created <- count_created + 1
         }, error = function(e) {
           # Rollback to savepoint so transaction remains usable
           tryCatch(
-            suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT analyte_sp_", count_created + count_failed))),
+            suppressWarnings(DBI::dbExecute(conn, "ROLLBACK TO SAVEPOINT analyte_sp")),
             error = function(e2) {}
           )
           cat(paste0("  [WARN] Failed to insert analyte: ", analyte_str, " - ", e$message, "\n"))

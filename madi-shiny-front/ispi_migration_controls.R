@@ -189,11 +189,11 @@ insert_control_results <- function(conn, control_data, buffer_data, standard_dat
   
   # 2. Helper to insert a single MBAA result row
   insert_one_result <- function(row, type) {
-    # Build accession (same logic as insert_control_samples)
+    # Build accession using the SAME format as process_control_row (cs_, cb_, st_)
     prefix <- switch(type,
-      "control" = "posc",
-      "blank"   = "blank",
-      "standard" = "stand"
+      "control" = "cs_",
+      "blank"   = "cb_",
+      "standard" = "st_"
     )
     id_col <- switch(type,
       "control" = "xmap_control_id",
@@ -201,7 +201,7 @@ insert_control_results <- function(conn, control_data, buffer_data, standard_dat
       "standard" = "xmap_standard_id"
     )
     source_id <- as.character(row[[id_col]])[1]
-    source_acc <- paste0(prefix, source_id, "_", experiment_accession)
+    source_acc <- paste0(prefix, source_id)
     
     # Build analyte string: antigen|feature (same pattern as expsample MBAA results)
     antigen <- if(!is.null(row$antigen) && !is.na(row$antigen)) as.character(row$antigen)[1] else ""
