@@ -2049,7 +2049,17 @@ observeEvent(input$execute_test_migration, {
     size = "m"
   ))
 
-  migration_log_content <- NULL
+  # In-memory log capture for download (no disk file)
+  log_con <- textConnection("test_log_lines", "w", local = FALSE)
+  
+  # Start logging to memory
+  cat(paste0("[INFO] Starting Test Migration Logging\n"))
+  sink(log_con, split = TRUE)
+  on.exit({
+    try(sink(), silent = TRUE)
+    try(close(log_con), silent = TRUE)
+  }, add = TRUE)
+
   source_conn <- NULL
   tryCatch({
     # Create source DB connection using env vars
@@ -2065,16 +2075,14 @@ observeEvent(input$execute_test_migration, {
       shinyjs::html(id = "test_progress_detail", html = detail)
     }
     
-    migration_log_content <<- capture.output({
-      results <<- execute_migration(
-        conn, preview_data_with_mappings, config,
-        commit = FALSE, source_conn = source_conn,
-        progress_cb = progress_cb
-      )
-    })
+    results <<- execute_migration(
+      conn, preview_data_with_mappings, config,
+      commit = FALSE, source_conn = source_conn,
+      progress_cb = progress_cb
+    )
     
     # Store log for download
-    migration_log_text(paste(migration_log_content, collapse = "\n"))
+    migration_log_text(paste(test_log_lines, collapse = "\n"))
     
     removeModal()
     
