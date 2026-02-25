@@ -51,7 +51,9 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
     
     # Extract fields safely
     plate_id <- as.character(row$plate_id)[1]
+    
     dilution <- as.character(row$dilution)[1]
+    
     # source column exists in xmap_control and xmap_standard but NOT in xmap_buffer
     source_val <- if("source" %in% names(row) && !is.null(row$source) && length(row$source) > 0 && !is.na(row$source[1])) {
       as.character(row$source)[1]
@@ -85,6 +87,7 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         if(res$status == "inserted") inserted_count <- inserted_count + 1
         else existing_count <- existing_count + 1
       }, error = function(e) {
+        tryCatch(suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT ", sp_name))), error = function(e2) {})
         acc <- paste0("cs_", control_data[i, "xmap_control_id"])
         err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
         failed_items[[length(failed_items) + 1]] <<- list(id = acc, error = err_msg)
@@ -105,6 +108,7 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         if(res$status == "inserted") inserted_count <- inserted_count + 1
         else existing_count <- existing_count + 1
       }, error = function(e) {
+        tryCatch(suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT ", sp_name))), error = function(e2) {})
         acc <- paste0("cb_", buffer_data[i, "xmap_buffer_id"])
         err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
         failed_items[[length(failed_items) + 1]] <<- list(id = acc, error = err_msg)
@@ -125,6 +129,7 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         if(res$status == "inserted") inserted_count <- inserted_count + 1
         else existing_count <- existing_count + 1
       }, error = function(e) {
+        tryCatch(suppressWarnings(DBI::dbExecute(conn, paste0("ROLLBACK TO SAVEPOINT ", sp_name))), error = function(e2) {})
         acc <- paste0("st_", standard_data[i, "xmap_standard_id"])
         err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
         failed_items[[length(failed_items) + 1]] <<- list(id = acc, error = err_msg)
