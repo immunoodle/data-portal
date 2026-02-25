@@ -88,9 +88,9 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         acc <- paste0("cs_", control_data[i, "xmap_control_id"])
         err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
         failed_items[[length(failed_items) + 1]] <<- list(id = acc, error = err_msg)
-        if(length(failed_items) <= 10) message("  [ERROR] Control ", acc, " failed: ", err_msg)
+        if(length(failed_items) <= 10) cat("  [ERROR] Control", acc, "failed:", err_msg, "\n")
       })
-      if(i %% 200 == 0) message(sprintf("  [INFO] Processed %d / %d controls (Failed: %d)", i, nrow(control_data), length(failed_items)))
+      if(i %% 200 == 0) cat(sprintf("  [INFO] Processed %d / %d controls (Failed: %d)\n", i, nrow(control_data), length(failed_items)))
     }
   }
   
@@ -108,9 +108,9 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         acc <- paste0("cb_", buffer_data[i, "xmap_buffer_id"])
         err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
         failed_items[[length(failed_items) + 1]] <<- list(id = acc, error = err_msg)
-        if(length(failed_items) <= 10) message("  [ERROR] Buffer ", acc, " failed: ", err_msg)
+        if(length(failed_items) <= 10) cat("  [ERROR] Buffer", acc, "failed:", err_msg, "\n")
       })
-      if(i %% 200 == 0) message(sprintf("  [INFO] Processed %d / %d buffers (Failed: %d)", i, nrow(buffer_data), length(failed_items)))
+      if(i %% 200 == 0) cat(sprintf("  [INFO] Processed %d / %d buffers (Failed: %d)\n", i, nrow(buffer_data), length(failed_items)))
     }
   }
   
@@ -128,9 +128,9 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
         acc <- paste0("st_", standard_data[i, "xmap_standard_id"])
         err_msg <- sprintf("%s | ExpAccLen:%d", e$message, nchar(experiment_accession))
         failed_items[[length(failed_items) + 1]] <<- list(id = acc, error = err_msg)
-        if(length(failed_items) <= 10) message("  [ERROR] Standard ", acc, " failed: ", err_msg)
+        if(length(failed_items) <= 10) cat("  [ERROR] Standard", acc, "failed:", err_msg, "\n")
       })
-      if(i %% 200 == 0) message(sprintf("  [INFO] Processed %d / %d standards (Failed: %d)", i, nrow(standard_data), length(failed_items)))
+      if(i %% 200 == 0) cat(sprintf("  [INFO] Processed %d / %d standards (Failed: %d)\n", i, nrow(standard_data), length(failed_items)))
     }
   }
   
