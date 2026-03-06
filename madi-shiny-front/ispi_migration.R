@@ -1688,9 +1688,31 @@ output$data_preview_table <- DT::renderDataTable({
 
 # Save to target - Execute Migration
 observeEvent(input$save_to_target, {
-  req(migration_values$preview_data)
-  req(input$target_study)
-  req(input$target_experiment)
+  cat("[SAVE] Save to Target button clicked\n")
+  
+  if(is.null(migration_values$preview_data) || nrow(migration_values$preview_data) == 0) {
+    showNotification("No data loaded. Please load data first.", type = "error", duration = 5)
+    return()
+  }
+  
+  if(is.null(input$target_study) || !nzchar(input$target_study)) {
+    showNotification("Please select a target study.", type = "error", duration = 5)
+    return()
+  }
+  
+  # Check experiment: either new or existing must be specified
+  experiment_acc <- if(isTRUE(input$create_new_experiment)) {
+    input$new_experiment_accession
+  } else {
+    input$target_experiment
+  }
+  
+  if(is.null(experiment_acc) || !nzchar(experiment_acc)) {
+    showNotification("Please select or create an experiment.", type = "error", duration = 5)
+    return()
+  }
+  
+  cat(paste0("[SAVE] Study: ", input$target_study, ", Experiment: ", experiment_acc, "\n"))
   
   # Collect timeperiod mappings from user inputs
   timeperiod_mapping <- list()
@@ -1756,20 +1778,29 @@ observeEvent(input$save_to_target, {
   }
   
   # Validate mappings
+  cat(paste0("[SAVE] Timeperiods: ", length(timeperiod_mapping), "/", length(unique_timeperiods),
+             ", Agroups: ", length(agroup_mapping), "/", length(unique_agroups),
+             ", Patients: ", length(patient_mapping), "/", length(patients_needing_mapping), "\n"))
+  
   if(length(timeperiod_mapping) != length(unique_timeperiods)) {
-    showNotification("Please map all timeperiod values before saving", type = "warning", duration = 5)
+    showNotification(
+      paste0("Please map all timeperiod values before saving (", length(timeperiod_mapping), "/", length(unique_timeperiods), " mapped)"), 
+      type = "warning", duration = 8)
     return()
   }
   
   if(length(agroup_mapping) != length(unique_agroups)) {
-    showNotification("Please map all agroup values before saving", type = "warning", duration = 5)
+    showNotification(
+      paste0("Please map all agroup values before saving (", length(agroup_mapping), "/", length(unique_agroups), " mapped)"), 
+      type = "warning", duration = 8)
     return()
   }
   
   if(length(patient_mapping) != length(patients_needing_mapping)) {
     showNotification(
-      paste0("Please map all ", length(patients_needing_mapping), " unmapped patient IDs to subjects before saving"),
-      type = "warning", duration = 5
+      paste0("Please map all ", length(patients_needing_mapping), " unmapped patient IDs to subjects before saving (",
+             length(patient_mapping), "/", length(patients_needing_mapping), " mapped)"),
+      type = "warning", duration = 8
     )
     return()
   }
