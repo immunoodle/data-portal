@@ -1640,6 +1640,16 @@ observeEvent(input$mapping_file_upload, {
     
     cat(paste0("[INFO] Loaded mapping file: ", file_name, " (", n_mappings, " mappings)\n"))
     
+    # Update UI dropdowns to reflect the uploaded mappings
+    for(j in 1:n_mappings) {
+      pid <- migration_values$mapping_override$patientid[j]
+      subj <- migration_values$mapping_override$subject_accession[j]
+      if(!is.na(pid) && !is.na(subj) && nzchar(subj)) {
+        input_id <- paste0("patient_map_", gsub("[^[:alnum:]]", "_", pid))
+        updateSelectInput(session, input_id, selected = subj)
+      }
+    }
+    
   }, error = function(e) {
     showNotification(paste("Error reading file:", e$message), type = "error", duration = 10)
   })
@@ -1726,6 +1736,21 @@ observeEvent(input$save_to_target, {
       mapped_value <- input[[input_id]]
       if(!is.null(mapped_value) && nzchar(mapped_value)) {
         patient_mapping[[as.character(pid)]] <- mapped_value
+      }
+    }
+  }
+  
+  # Also include patients mapped via CSV/Excel upload (mapping_override)
+  if(!is.null(migration_values$mapping_override)) {
+    file_map <- migration_values$mapping_override
+    for(pid in patients_needing_mapping) {
+      pid_str <- as.character(pid)
+      # Only fill if not already mapped via dropdown
+      if(is.null(patient_mapping[[pid_str]]) || !nzchar(patient_mapping[[pid_str]])) {
+        match_idx <- which(file_map$patientid == pid_str)
+        if(length(match_idx) > 0 && !is.na(file_map$subject_accession[match_idx[1]]) && nzchar(file_map$subject_accession[match_idx[1]])) {
+          patient_mapping[[pid_str]] <- file_map$subject_accession[match_idx[1]]
+        }
       }
     }
   }
