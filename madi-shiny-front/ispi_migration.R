@@ -1353,7 +1353,7 @@ observeEvent(input$load_data_preview, {
         "LEFT JOIN ", Sys.getenv("ISPI_SOURCE_SCHEMA", "madi_results"), ".xmap_subjects subj ",
         "  ON xs.patientid = subj.xmap_patientid ",
         "LEFT JOIN ", Sys.getenv("ISPI_SOURCE_SCHEMA", "madi_results"), ".xmap_planned_visit visit ",
-        "  ON xs.timeperiod = visit.timepoint_name ",
+        "  ON xs.timeperiod = visit.timepoint_name AND xs.study_accession = visit.study_accession ",
         "LEFT JOIN ", Sys.getenv("ISPI_SOURCE_SCHEMA", "madi_results"), ".xmap_sample_timing timing ",
         "  ON xs.patientid = timing.patientid AND xs.timeperiod = timing.timeperiod"
       )

@@ -304,11 +304,11 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
             biosample_name,
             as.character(planned_visit_acc)[1],
             as.character(study_accession)[1],
-            if(is.na(row$actual_visit_day)) NULL else as.numeric(row$actual_visit_day)[1],
+            if(is.null(row$actual_visit_day) || length(row$actual_visit_day) == 0 || is.na(row$actual_visit_day[1])) NULL else as.numeric(row$actual_visit_day)[1],
             as.character(config$time_unit %||% "Days")[1],
             as.character(config$t0_event %||% "Time of enrollment")[1],
             as.character(row$subject_accession)[1],
-            as.character(row$biosample_type %||% "blood")[1],
+            if(is.null(row$biosample_type) || length(row$biosample_type) == 0 || is.na(row$biosample_type[1])) "blood" else as.character(row$biosample_type)[1],
             as.integer(workspace_id)[1]
           )
         )
