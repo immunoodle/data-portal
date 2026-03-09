@@ -320,7 +320,13 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
         # Biosample doesn't exist - create new
         subject_num <- gsub("SUB", "", subject_acc)
         timeperiod_short <- substr(row$timeperiod, 1, 3)
-        biosample_acc <- sprintf("BS%s%s_%d", subject_num, timeperiod_short, i)
+        
+        # Safely constrain to 15 characters: "BS[sub][tpd]_[i]"
+        bs_suffix <- paste0("_", i)
+        bs_max_len <- 15 - nchar(bs_suffix)
+        bs_base <- substr(sprintf("BS%s%s", subject_num, timeperiod_short), 1, bs_max_len)
+        biosample_acc <- paste0(bs_base, bs_suffix)
+        
         biosample_name <- sprintf("%s_%s", subject_acc, row$timeperiod)
         
         DBI::dbExecute(conn,
@@ -339,7 +345,7 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
             as.character(config$time_unit %||% "Days")[[1]],
             as.character(config$t0_event %||% "Time of enrollment")[[1]],
             subject_acc,
-            if(is.null(row$biosample_type) || length(row$biosample_type) == 0 || is.na(row$biosample_type[[1]])) "blood" else as.character(row$biosample_type[[1]]),
+            (function(bt) { res <- as.character(if(length(bt)==0 || is.na(bt[[1]])) "Whole blood" else bt[[1]]); if(tolower(res)=="blood") "Whole blood" else res })(row$biosample_type),
             as.integer(workspace_id)[[1]]
           )
         )
