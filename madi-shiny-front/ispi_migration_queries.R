@@ -335,7 +335,7 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
             biosample_name,
             as.character(planned_visit_acc)[[1]],
             as.character(study_accession)[[1]],
-            if(is.null(row$actual_visit_day) || length(row$actual_visit_day) == 0 || is.na(row$actual_visit_day[[1]])) NULL else as.numeric(row$actual_visit_day[[1]]),
+            if(is.null(row$actual_visit_day) || length(row$actual_visit_day) == 0 || is.na(row$actual_visit_day[[1]])) NA_real_ else as.numeric(row$actual_visit_day[[1]]),
             as.character(config$time_unit %||% "Days")[[1]],
             as.character(config$t0_event %||% "Time of enrollment")[[1]],
             subject_acc,
@@ -364,6 +364,16 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
         error = function(e2) {}
       )
       cat("  [ERROR] Failed biosample for sample", row$sampleid, ":", e$message, "\n")
+      
+      # Determine safe param 5 value for debugging (don't log it if it crashed during eval, but here we know it evaled)
+      p5_eval <- if(is.null(row$actual_visit_day) || length(row$actual_visit_day) == 0 || is.na(row$actual_visit_day[[1]])) NA_real_ else as.numeric(row$actual_visit_day[[1]])
+      
+      cat("    [DEBUG] Param 1 length:", length(biosample_acc), "type:", typeof(biosample_acc), "\n")
+      cat("    [DEBUG] Param 2 length:", length(biosample_name), "type:", typeof(biosample_name), "\n")
+      cat("    [DEBUG] Param 3 length:", length(as.character(planned_visit_acc)[[1]]), "type:", typeof(as.character(planned_visit_acc)[[1]]), "\n")
+      cat("    [DEBUG] Param 4 length:", length(as.character(study_accession)[[1]]), "type:", typeof(as.character(study_accession)[[1]]), "\n")
+      cat("    [DEBUG] Param 5 length:", length(p5_eval), "type:", typeof(p5_eval), "value:", p5_eval, "\n")
+      cat("    [DEBUG] Param 8 length:", length(subject_acc), "type:", typeof(subject_acc), "\n")
       failed_biosamples[[length(failed_biosamples) + 1]] <<- list(
         sampleid = row$sampleid,
         error = e$message
@@ -908,10 +918,10 @@ insert_experiment_samples <- function(conn, source_data, timeperiod_mapping, wor
           sample_mapping[[ as.character(i) ]] <- list(
              expsample_accession = expsample_acc,
              biosample_accession = biosample_acc,
-             patientid = as.character(row$patientid)[1],
-             plate = if("plate" %in% names(row)) as.character(row$plate)[1] else NA,
-             well = if("well" %in% names(row)) as.character(row$well)[1] else NA,
-             timeperiod = if("timeperiod" %in% names(row)) as.character(row$timeperiod)[1] else NA,
+             patientid = as.character(row$patientid)[[1]],
+             plate = if("plate" %in% names(row)) as.character(row$plate)[[1]] else NA,
+             well = if("well" %in% names(row)) as.character(row$well)[[1]] else NA,
+             timeperiod = if("timeperiod" %in% names(row)) as.character(row$timeperiod)[[1]] else NA,
              subject_accession = if("subject_accession" %in% names(row) && !is.null(row$subject_accession) && !is.na(row$subject_accession)) as.character(row$subject_accession) else NULL,
              arm_accession = if("arm_accession" %in% names(row) && !is.null(row$arm_accession) && !is.na(row$arm_accession)) as.character(row$arm_accession) else NULL
           )
@@ -939,9 +949,9 @@ insert_experiment_samples <- function(conn, source_data, timeperiod_mapping, wor
           params = list(
             expsample_acc, 
             experiment_accession, 
-            as.character(row$sampleid)[1], 
+            as.character(row$sampleid)[[1]], 
             result_schema,  # Use parameter from function
-            as.integer(workspace_id)[1]
+            as.integer(workspace_id)[[1]]
           )
         )
         
@@ -957,10 +967,10 @@ insert_experiment_samples <- function(conn, source_data, timeperiod_mapping, wor
         sample_mapping[[ as.character(i) ]] <- list(
              expsample_accession = expsample_acc,
              biosample_accession = biosample_acc,
-             patientid = as.character(row$patientid)[1],
-             plate = if("plate" %in% names(row)) as.character(row$plate)[1] else NA,
-             well = if("well" %in% names(row)) as.character(row$well)[1] else NA,
-             timeperiod = if("timeperiod" %in% names(row)) as.character(row$timeperiod)[1] else NA,
+             patientid = as.character(row$patientid)[[1]],
+             plate = if("plate" %in% names(row)) as.character(row$plate)[[1]] else NA,
+             well = if("well" %in% names(row)) as.character(row$well)[[1]] else NA,
+             timeperiod = if("timeperiod" %in% names(row)) as.character(row$timeperiod)[[1]] else NA,
              subject_accession = if("subject_accession" %in% names(row) && !is.null(row$subject_accession) && !is.na(row$subject_accession)) as.character(row$subject_accession) else NULL,
              arm_accession = if("arm_accession" %in% names(row) && !is.null(row$arm_accession) && !is.na(row$arm_accession)) as.character(row$arm_accession) else NULL
         )
@@ -1223,7 +1233,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
       
       # best_glance_all (FETCH from source) for Standard Curves
       # Source Experiment Name comes from source_data (e.g. IgG1) NOT config (EXPxxxx)
-      source_exp_name_detected <- if(!is.null(source_data$experiment_accession)) unique(source_data$experiment_accession)[1] else config$experiment_accession
+      source_exp_name_detected <- if(!is.null(source_data$experiment_accession)) unique(source_data$experiment_accession)[[1]] else config$experiment_accession
       
       sc_q <- paste0("SELECT * FROM ", source_schema, ".best_glance_all WHERE study_accession = '", study_acc_source, "' AND experiment_accession = '", source_exp_name_detected, "'")
       
@@ -1687,8 +1697,8 @@ generate_dq_audit_report <- function(conn, experiment_accession) {
   
   # Helper: safely extract integer, treating NULL, NA, and empty as default
   safe_int <- function(x, default = 0L) {
-    if(is.null(x) || length(x) == 0 || is.na(x[1])) return(as.integer(default))
-    as.integer(x[1])
+    if(is.null(x) || length(x) == 0 || is.na(x[[1]])) return(as.integer(default))
+    as.integer(x[[1]])
   }
   
   add("════════════════════════════════════════════════")
