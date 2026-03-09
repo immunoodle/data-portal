@@ -272,7 +272,7 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
     }
     
     # Resolve subject_accession: from JOIN (xmap_subjects) or from mapping_override
-    subject_acc <- as.character(row$subject_accession)[1]
+    subject_acc <- as.character(row$subject_accession)[[1]]
     if(is.null(subject_acc) || length(subject_acc) == 0 || is.na(subject_acc) || !nzchar(subject_acc)) {
       # Try mapping_override (Excel/CSV upload)
       if(!is.null(mapping_override)) {
@@ -333,14 +333,14 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
           params = list(
             biosample_acc,
             biosample_name,
-            as.character(planned_visit_acc)[1],
-            as.character(study_accession)[1],
-            if(is.null(row$actual_visit_day) || length(row$actual_visit_day) == 0 || is.na(row$actual_visit_day[1])) NULL else as.numeric(row$actual_visit_day)[1],
-            as.character(config$time_unit %||% "Days")[1],
-            as.character(config$t0_event %||% "Time of enrollment")[1],
+            as.character(planned_visit_acc)[[1]],
+            as.character(study_accession)[[1]],
+            if(is.null(row$actual_visit_day) || length(row$actual_visit_day) == 0 || is.na(row$actual_visit_day[[1]])) NULL else as.numeric(row$actual_visit_day[[1]]),
+            as.character(config$time_unit %||% "Days")[[1]],
+            as.character(config$t0_event %||% "Time of enrollment")[[1]],
             subject_acc,
-            if(is.null(row$biosample_type) || length(row$biosample_type) == 0 || is.na(row$biosample_type[1])) "blood" else as.character(row$biosample_type)[1],
-            as.integer(workspace_id)[1]
+            if(is.null(row$biosample_type) || length(row$biosample_type) == 0 || is.na(row$biosample_type[[1]])) "blood" else as.character(row$biosample_type[[1]]),
+            as.integer(workspace_id)[[1]]
           )
         )
         
