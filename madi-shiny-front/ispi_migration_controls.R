@@ -33,7 +33,7 @@ insert_control_samples <- function(conn, control_data, buffer_data, standard_dat
       "blank"   = "xmap_buffer_id",
       "standard" = "xmap_standard_id"
     )
-    source_id <- as.character(row[[id_col]])[1]
+    source_id <- as.character(row[[id_col]])[[1]]
     
     # "cs_123456" = 9 chars (safely under 15)
     acc <- paste0(prefix, source_id)
@@ -385,14 +385,14 @@ insert_standard_curves <- function(conn, fit_data, workspace_id, study_accession
       feature <- if(!is.null(row$experiment_accession) && !is.na(row$experiment_accession)) as.character(row$experiment_accession)[1] else ""
       analyte_str <- if(nchar(feature) > 0) paste0(antigen, "|", feature) else antigen
       
-      plate <- if(!is.null(row$plate) && !is.na(row$plate)) as.character(row$plate)[1] else ""
-      dilution <- if(!is.null(row$nominal_sample_dilution) && !is.na(row$nominal_sample_dilution)) as.character(row$nominal_sample_dilution)[1] else ""
+      plate <- if(!is.null(row$plate) && !is.na(row$plate)) as.character(row$plate)[[1]] else ""
+      dilution <- if(!is.null(row$nominal_sample_dilution) && !is.na(row$nominal_sample_dilution)) as.character(row$nominal_sample_dilution)[[1]] else ""
       assay_id <- paste0(plate, "|", dilution)
       
       assay_group_id <- paste0(experiment_accession, "_standard")
       
       # Formula string
-      formula_body <- if(!is.null(row$formula) && !is.na(row$formula)) as.character(row$formula)[1] else "NA"
+      formula_body <- if(!is.null(row$formula) && !is.na(row$formula)) as.character(row$formula)[[1]] else "NA"
       params <- c(
         paste0("a=", if(!is.null(row$a)) row$a else "NA"),
         paste0("b=", if(!is.null(row$b)) row$b else "NA"),
@@ -403,8 +403,8 @@ insert_standard_curves <- function(conn, fit_data, workspace_id, study_accession
       formula_str <- paste0("Formula: ", formula_body, "; Params: ", paste(params, collapse=", "))
       if(nchar(formula_str) > 1000) formula_str <- substr(formula_str, 1, 1000)
       
-      llod <- if(!is.null(row$llod) && !is.na(row$llod)) as.character(row$llod)[1] else NA_character_
-      ulod <- if(!is.null(row$ulod) && !is.na(row$ulod)) as.character(row$ulod)[1] else NA_character_
+      llod <- if(!is.null(row$llod) && !is.na(row$llod)) as.character(row$llod)[[1]] else NA_character_
+      ulod <- if(!is.null(row$ulod) && !is.na(row$ulod)) as.character(row$ulod)[[1]] else NA_character_
       
       # Execute Insert
       DBI::dbExecute(conn, insert_query, params = list(
@@ -509,7 +509,7 @@ insert_sample_qc_data <- function(conn, sample_qc_df, sample_mapping, workspace_
       suppressWarnings(DBI::dbExecute(conn, paste0("SAVEPOINT ", sp_name)))
       
       # Look up expsample by patientid (subject_id in QC data)
-      patient_id <- as.character(row$subject_id)[1]
+      patient_id <- as.character(row$subject_id)[[1]]
       matched_expsample <- patient_lookup[[patient_id]]
       
       if(is.null(matched_expsample)) {
@@ -522,22 +522,22 @@ insert_sample_qc_data <- function(conn, sample_qc_df, sample_mapping, workspace_
       DBI::dbExecute(conn, insert_query, params = list(
         matched_expsample,                                                          # $1
         workspace_id,                                                               # $2
-        if(!is.null(row$plate_number)) as.character(row$plate_number)[1] else NA,    # $3
-        if(!is.null(row$plate_well)) as.character(row$plate_well)[1] else NA,        # $4
-        if(!is.null(row$nominal_sample_dilution)) as.character(row$nominal_sample_dilution)[1] else NA, # $5
-        if(!is.null(row$analyte_name)) as.character(row$analyte_name)[1] else NA,    # $6
-        if(!is.null(row$reagent_name)) as.character(row$reagent_name)[1] else NA,    # $7
-        if(!is.null(row$timeperiod)) as.character(row$timeperiod)[1] else NA,        # $8
-        if(!is.null(row$subject_id)) as.character(row$subject_id)[1] else NA,        # $9
-        if(!is.null(row$sample_dilution) && !is.na(row$sample_dilution)) as.numeric(row$sample_dilution)[1] else NA, # $10
-        if(!is.null(row$pctaggbeads) && !is.na(row$pctaggbeads)) as.numeric(row$pctaggbeads)[1] else NA, # $11
-        if(!is.null(row$samplingerrors)) as.character(row$samplingerrors)[1] else NA, # $12
-        if(!is.null(row$bead_count) && !is.na(row$bead_count)) as.integer(row$bead_count)[1] else NA_integer_, # $13
-        if(!is.null(row$mfi) && !is.na(row$mfi)) as.numeric(row$mfi)[1] else NA,    # $14
-        if(!is.null(row$predicted_concentration) && !is.na(row$predicted_concentration)) as.numeric(row$predicted_concentration)[1] else NA, # $15
-        if(!is.null(row$se_concentration) && !is.na(row$se_concentration)) as.numeric(row$se_concentration)[1] else NA, # $16
-        if(!is.null(row$gate_class_loq)) as.character(row$gate_class_loq)[1] else NA, # $17
-        if(!is.null(row$gate_class_lod)) as.character(row$gate_class_lod)[1] else NA  # $18
+        if(!is.null(row$plate_number)) as.character(row$plate_number)[[1]] else NA,    # $3
+        if(!is.null(row$plate_well)) as.character(row$plate_well)[[1]] else NA,        # $4
+        if(!is.null(row$nominal_sample_dilution)) as.character(row$nominal_sample_dilution)[[1]] else NA, # $5
+        if(!is.null(row$analyte_name)) as.character(row$analyte_name)[[1]] else NA,    # $6
+        if(!is.null(row$reagent_name)) as.character(row$reagent_name)[[1]] else NA,    # $7
+        if(!is.null(row$timeperiod)) as.character(row$timeperiod)[[1]] else NA,        # $8
+        if(!is.null(row$subject_id)) as.character(row$subject_id)[[1]] else NA,        # $9
+        if(!is.null(row$sample_dilution) && !is.na(row$sample_dilution)) as.numeric(row$sample_dilution)[[1]] else NA, # $10
+        if(!is.null(row$pctaggbeads) && !is.na(row$pctaggbeads)) as.numeric(row$pctaggbeads)[[1]] else NA, # $11
+        if(!is.null(row$samplingerrors)) as.character(row$samplingerrors)[[1]] else NA, # $12
+        if(!is.null(row$bead_count) && !is.na(row$bead_count)) as.integer(row$bead_count)[[1]] else NA_integer_, # $13
+        if(!is.null(row$mfi) && !is.na(row$mfi)) as.numeric(row$mfi)[[1]] else NA,    # $14
+        if(!is.null(row$predicted_concentration) && !is.na(row$predicted_concentration)) as.numeric(row$predicted_concentration)[[1]] else NA, # $15
+        if(!is.null(row$se_concentration) && !is.na(row$se_concentration)) as.numeric(row$se_concentration)[[1]] else NA, # $16
+        if(!is.null(row$gate_class_loq)) as.character(row$gate_class_loq)[[1]] else NA, # $17
+        if(!is.null(row$gate_class_lod)) as.character(row$gate_class_lod)[[1]] else NA  # $18
       ))
       
       suppressWarnings(DBI::dbExecute(conn, paste0("RELEASE SAVEPOINT ", sp_name)))
@@ -599,9 +599,9 @@ insert_model_qc_data <- function(conn, model_qc_df, sc_accession_map, workspace_
       
       # Find matching standard_curve_accession from the map
       # sc_accession_map is keyed by "antigen|experiment_accession|plate"
-      antigen <- if(!is.null(row$reagent_name)) as.character(row$reagent_name)[1] else ""
-      plate <- if(!is.null(row$plate_number)) as.character(row$plate_number)[1] else ""
-      experiment <- if(!is.null(row$experiment_name)) as.character(row$experiment_name)[1] else ""
+      antigen <- if(!is.null(row$reagent_name)) as.character(row$reagent_name)[[1]] else ""
+      plate <- if(!is.null(row$plate_number)) as.character(row$plate_number)[[1]] else ""
+      experiment <- if(!is.null(row$experiment_name)) as.character(row$experiment_name)[[1]] else ""
       
       map_key <- paste0(antigen, "|", experiment, "|", plate)
       matched_sc <- if(!is.null(sc_accession_map[[map_key]])) sc_accession_map[[map_key]] else NULL
@@ -619,10 +619,10 @@ insert_model_qc_data <- function(conn, model_qc_df, sc_accession_map, workspace_
         next
       }
       
-      safe_num <- function(x) if(!is.null(x) && !is.na(x[1])) as.numeric(x)[1] else NA_real_
-      safe_chr <- function(x) if(!is.null(x) && !is.na(x[1])) as.character(x)[1] else NA_character_
-      safe_bool <- function(x) if(!is.null(x) && !is.na(x[1])) as.logical(x)[1] else NA
-      safe_dbl <- function(x) if(!is.null(x) && !is.na(x[1])) as.double(x)[1] else NA_real_
+      safe_num <- function(x) if(!is.null(x) && !is.na(x[[1]])) as.numeric(x)[[1]] else NA_real_
+      safe_chr <- function(x) if(!is.null(x) && !is.na(x[[1]])) as.character(x)[[1]] else NA_character_
+      safe_bool <- function(x) if(!is.null(x) && !is.na(x[[1]])) as.logical(x)[[1]] else NA
+      safe_dbl <- function(x) if(!is.null(x) && !is.na(x[[1]])) as.double(x)[[1]] else NA_real_
       
       DBI::dbExecute(conn, insert_query, params = list(
         matched_sc,                                  # $1 standard_curve_accession
