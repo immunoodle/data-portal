@@ -225,7 +225,7 @@ validate_existing_subjects <- function(conn, source_data, workspace_id, commit =
 # =====================================================
 # Checks if biosamples exist, creates if missing, reuses if exists
 insert_biosamples <- function(conn, source_data, workspace_id, study_accession, 
-                              timeperiod_mapping, config) {
+                              timeperiod_mapping, config, mapping_override = NULL) {
   
   cat("[INFO] Processing biosamples\n")
   
@@ -233,8 +233,8 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
   unique_samples <- source_data %>%
     select(patientid, subject_accession, timeperiod, sampleid, 
            biosample_type, actual_visit_day) %>%
-    filter(!is.na(patientid), !is.na(subject_accession), !is.na(timeperiod)) %>%
-    distinct(sampleid, .keep_all = TRUE)
+    filter(!is.na(patientid), !is.na(timeperiod)) %>%
+    distinct(sampleid, patientid, timeperiod, .keep_all = TRUE)
   
   if(nrow(unique_samples) == 0) {
     cat("[WARN] No samples to process\n")
@@ -257,6 +257,23 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
       next  # Skip samples with unmapped timeperiods
     }
     
+    # Resolve subject_accession: from JOIN (xmap_subjects) or from mapping_override
+    subject_acc <- as.character(row$subject_accession)[1]
+    if(is.null(subject_acc) || length(subject_acc) == 0 || is.na(subject_acc) || !nzchar(subject_acc)) {
+      # Try mapping_override (Excel/CSV upload)
+      if(!is.null(mapping_override)) {
+        match_idx <- which(as.character(mapping_override$patientid) == as.character(row$patientid))
+        if(length(match_idx) > 0) {
+          subject_acc <- as.character(mapping_override$subject_accession[match_idx[1]])
+        }
+      }
+    }
+    
+    if(is.null(subject_acc) || length(subject_acc) == 0 || is.na(subject_acc) || !nzchar(subject_acc)) {
+      cat("  [SKIP] No subject mapping for patient", row$patientid, "\n")
+      next
+    }
+    
     sp_name <- paste0("bio_sp_", i)
     tryCatch({
       suppressWarnings(DBI::dbExecute(conn, paste0("SAVEPOINT ", sp_name)))
@@ -269,7 +286,7 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
            AND workspace_id = $3
          LIMIT 1",
         params = list(
-          as.character(row$subject_accession)[1],
+          subject_acc,
           as.character(planned_visit_acc)[1],
           as.integer(workspace_id)[1]
         )
@@ -287,10 +304,10 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
         }
       } else {
         # Biosample doesn't exist - create new
-        subject_num <- gsub("SUB", "", row$subject_accession)
+        subject_num <- gsub("SUB", "", subject_acc)
         timeperiod_short <- substr(row$timeperiod, 1, 3)
         biosample_acc <- sprintf("BS%s%s_%d", subject_num, timeperiod_short, i)
-        biosample_name <- sprintf("%s_%s", row$subject_accession, row$timeperiod)
+        biosample_name <- sprintf("%s_%s", subject_acc, row$timeperiod)
         
         DBI::dbExecute(conn,
           "INSERT INTO madi_dat.biosample (
@@ -307,7 +324,7 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
             if(is.null(row$actual_visit_day) || length(row$actual_visit_day) == 0 || is.na(row$actual_visit_day[1])) NULL else as.numeric(row$actual_visit_day)[1],
             as.character(config$time_unit %||% "Days")[1],
             as.character(config$t0_event %||% "Time of enrollment")[1],
-            as.character(row$subject_accession)[1],
+            subject_acc,
             if(is.null(row$biosample_type) || length(row$biosample_type) == 0 || is.na(row$biosample_type[1])) "blood" else as.character(row$biosample_type)[1],
             as.integer(workspace_id)[1]
           )
@@ -321,8 +338,9 @@ insert_biosamples <- function(conn, source_data, workspace_id, study_accession,
         }
       }
       
-      # Track biosample for this sample
-      biosample_map[[as.character(row$sampleid)]] <- biosample_acc
+      # Track biosample for this sample — key is sampleid+patientid to avoid collision
+      map_key <- paste0(row$sampleid, "_", row$patientid)
+      biosample_map[[map_key]] <- biosample_acc
 
       suppressWarnings(DBI::dbExecute(conn, paste0("RELEASE SAVEPOINT ", sp_name)))
       
@@ -364,8 +382,10 @@ link_expsample_biosample_internal <- function(conn, biosample_map, sample_prefix
   failed_links <- list()
   
   # For each sample, link its expsample to biosample
-  for(sampleid in names(biosample_map)) {
-    biosample_acc <- biosample_map[[sampleid]]
+  for(map_key in names(biosample_map)) {
+    biosample_acc <- biosample_map[[map_key]]
+    # map_key is "sampleid_patientid" — extract just the sampleid for the expsample accession
+    sampleid <- strsplit(map_key, "_")[[1]][1]
     expsample_acc <- paste0(sample_prefix, sampleid)
     
     sp_name <- paste0("link_sp_", gsub("[^[:alnum:]]", "_", sampleid))
@@ -1062,7 +1082,8 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   results$biosamples <- insert_biosamples(
     conn, source_data,
     config$workspace_id, config$study_accession,
-    config$timeperiod_mapping, config
+    config$timeperiod_mapping, config,
+    mapping_override = config$mapping_override
   )
   
   if(!results$biosamples$success) {

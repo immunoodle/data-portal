@@ -1351,7 +1351,7 @@ observeEvent(input$load_data_preview, {
         "timing.actual_visit_day ",
         "FROM ", Sys.getenv("ISPI_SOURCE_SCHEMA", "madi_results"), ".xmap_sample xs ",
         "LEFT JOIN ", Sys.getenv("ISPI_SOURCE_SCHEMA", "madi_results"), ".xmap_subjects subj ",
-        "  ON xs.patientid = subj.xmap_patientid ",
+        "  ON xs.patientid = subj.xmap_patientid AND xs.study_accession = subj.study_accession ",
         "LEFT JOIN ", Sys.getenv("ISPI_SOURCE_SCHEMA", "madi_results"), ".xmap_planned_visit visit ",
         "  ON xs.timeperiod = visit.timepoint_name AND xs.study_accession = visit.study_accession ",
         "LEFT JOIN ", Sys.getenv("ISPI_SOURCE_SCHEMA", "madi_results"), ".xmap_sample_timing timing ",
@@ -1852,7 +1852,8 @@ observeEvent(input$save_to_target, {
     t0_event = input$biosample_t0_event %||% "Time of enrollment",
     timeperiod_mapping = timeperiod_mapping,
     agroup_mapping = agroup_mapping,
-    ispi_project_id = input$ispi_project_id
+    ispi_project_id = input$ispi_project_id,
+    mapping_override = migration_values$mapping_override
   )
   
   # Debug config values
