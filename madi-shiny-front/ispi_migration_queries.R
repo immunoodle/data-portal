@@ -155,7 +155,7 @@ get_source_experiments_list <- function(conn, schema = "madi_results", project_i
 # =====================================================
 # Validates that subjects from xmap_subjects exist in the target database
 # Does NOT create new subjects - they should already exist
-validate_existing_subjects <- function(conn, source_data, workspace_id, commit = FALSE) {
+validate_existing_subjects <- function(conn, source_data, workspace_id, commit = FALSE, mapping_override = NULL) {
   
   # Get unique patients and their mapped subject_accession from source data
   # Note: source_data should include subject_accession from xmap_subjects join
@@ -163,6 +163,20 @@ validate_existing_subjects <- function(conn, source_data, workspace_id, commit =
     select(patientid, subject_accession) %>%
     filter(!is.na(patientid), !is.na(subject_accession)) %>%
     distinct(patientid, .keep_all = TRUE)
+  
+  # Also include patients mapped via CSV/Excel upload (mapping_override)
+  if(!is.null(mapping_override) && nrow(mapping_override) > 0) {
+    override_patients <- mapping_override %>%
+      rename(subject_accession = subject_accession) %>%
+      filter(!is.na(patientid), !is.na(subject_accession)) %>%
+      distinct(patientid, .keep_all = TRUE)
+    # Merge — mapping_override wins for any patient_id that appears in both
+    combined <- bind_rows(
+      override_patients,
+      unique_patients %>% filter(!patientid %in% override_patients$patientid)
+    )
+    unique_patients <- combined %>% distinct(patientid, .keep_all = TRUE)
+  }
   
   cat("[INFO] Found", nrow(unique_patients), "unique patients with subject mappings\n")
   
@@ -739,33 +753,42 @@ insert_arm_subject_associations <- function(conn, source_data, arm_mapping, work
     existing_count <- 0
     failed_items <- list()
     
-    # Get unique patient combinations with their subject_accession and arm_accession from xmap_subjects
-    unique_combos <- unique(source_data[, c("patientid", "subject_accession", "arm_accession")])
+    # Get unique patient combos; bring agroup so we can fall back to arm_mapping
+    avail_cols <- intersect(c("patientid", "subject_accession", "arm_accession", "agroup"), names(source_data))
+    unique_combos <- unique(source_data[, avail_cols, drop = FALSE])
     unique_combos <- unique_combos[!is.na(unique_combos$patientid), ]
     
     for(i in 1:nrow(unique_combos)) {
       subject_acc <- unique_combos$subject_accession[i]
-      arm_acc <- unique_combos$arm_accession[i]
-      patient_id <- unique_combos$patientid[i]
+      arm_acc     <- unique_combos$arm_accession[i]
+      patient_id  <- unique_combos$patientid[i]
       
-      # Validate that both subject and arm accessions are present
-      if(is.null(subject_acc) || is.na(subject_acc) || nchar(subject_acc) == 0) {
+      # Validate subject_accession
+      if(is.null(subject_acc) || is.na(subject_acc) || nchar(as.character(subject_acc)) == 0) {
         cat("  [WARN] Patient", patient_id, "has no subject_accession - skipping\n")
         failed_items[[length(failed_items) + 1]] <- list(
           type = "arm_2_subject",
           patient_id = patient_id,
-          error = "No subject_accession in xmap_subjects"
+          error = "No subject_accession in source data"
         )
         next
       }
       
-      if(is.null(arm_acc) || is.na(arm_acc) || nchar(arm_acc) == 0) {
-        cat("  [WARN] Patient", patient_id, "has no arm_accession - skipping\n")
+      # If arm_accession is missing from xmap_subjects JOIN, fall back to agroup_mapping
+      if(is.null(arm_acc) || is.na(arm_acc) || nchar(as.character(arm_acc)) == 0) {
+        agroup_val <- if("agroup" %in% names(unique_combos)) as.character(unique_combos$agroup[i]) else NULL
+        if(!is.null(agroup_val) && !is.na(agroup_val) && nchar(agroup_val) > 0) {
+          arm_acc <- arm_mapping[[agroup_val]]
+        }
+      }
+      
+      if(is.null(arm_acc) || is.na(arm_acc) || nchar(as.character(arm_acc)) == 0) {
+        cat("  [WARN] Patient", patient_id, "has no arm_accession (checked xmap_subjects + agroup_mapping) - skipping\n")
         failed_items[[length(failed_items) + 1]] <- list(
           type = "arm_2_subject",
           patient_id = patient_id,
-          subject_accession = subject_acc,
-          error = "No arm_accession in xmap_subjects"
+          subject_accession = as.character(subject_acc),
+          error = "No arm_accession from xmap_subjects or agroup_mapping"
         )
         next
       }
@@ -864,14 +887,13 @@ insert_experiment_samples <- function(conn, source_data, timeperiod_mapping, wor
         }
         
         # Determine biosample accession
-        # If biosample_map is provided (from Step 2B), use it
+        # If biosample_map is provided (from Step 2B), use composite sampleid_patientid key
         biosample_acc <- NULL
-        if(!is.null(biosample_map) && row$sampleid %in% names(biosample_map)) {
-           biosample_acc <- biosample_map[[row$sampleid]]
-        } else {
-           # Fallback logic if needed (e.g. assume same ID structure?)
-           # For now, if missing map, we can't link to biosample easily without querying
-           # (No action needed)
+        if(!is.null(biosample_map)) {
+          composite_key <- paste0(row$sampleid, "_", row$patientid)
+          if(composite_key %in% names(biosample_map)) {
+            biosample_acc <- biosample_map[[composite_key]]
+          }
         }
 
         # Check if expsample already exists
@@ -1041,7 +1063,8 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   results$subjects <- validate_existing_subjects(
     conn, source_data, 
     config$workspace_id,
-    commit
+    commit,
+    mapping_override = config$mapping_override
   )
   
   if(!results$subjects$success) {
@@ -1114,7 +1137,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   # This uses the mapping from Step 5 to link results to created experiment samples
   cat("\n--- STEP 6: INSERT RESULTS ---\n")
   pcb("Step 6/9: MBAA Results", paste("Inserting assay results (this is the longest step)"))
-  if(!is.null(config$result_schema) && config$result_schema == "MBAA") {
+  if(!is.null(config$result_schema_type) && config$result_schema_type == "MBAA") {
     results$mbaa_results <- insert_mbaa_results(
       conn, source_data, results$expsamples$sample_mapping,
       config$experiment_accession, config$study_accession,
@@ -1162,7 +1185,7 @@ execute_migration <- function(conn, source_data, config, commit = FALSE, source_
   # ==========================================================================
   # Step 7-9: Controls and Standards (MBAA Only)
   # ==========================================================================
-  if(!is.null(config$result_schema) && config$result_schema == "MBAA") {
+  if(!is.null(config$result_schema_type) && config$result_schema_type == "MBAA") {
       cat("\n--- STEPS 7-9: CONTROLS & STANDARDS ---\n")
       
       # Determine which connection to use for SOURCE data fetching
